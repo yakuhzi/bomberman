@@ -1,11 +1,13 @@
 import os
 import pickle
 import random
+import torch
+from typing import List
 
 import numpy as np
 
 
-ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']#, 'BOMB']
 
 
 def setup(self):
@@ -24,8 +26,7 @@ def setup(self):
     """
     if self.train or not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
-        weights = np.random.rand(len(ACTIONS))
-        self.model = weights / weights.sum()
+
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
@@ -46,10 +47,19 @@ def act(self, game_state: dict) -> str:
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
-        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
+        ac = np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .2])
+        #print("ac", ac)
+        return ac
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=self.model)
+    #return np.random.choice(ACTIONS, p=self.model)
+
+    state = state_to_features(game_state)
+    state0 = torch.tensor(state, dtype=torch.float)
+    prediction = self.model(state0)
+    move = torch.argmax(prediction).item()
+    #print(ACTIONS[move], move)
+    return ACTIONS[move]
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -69,11 +79,38 @@ def state_to_features(game_state: dict) -> np.array:
     # This is the dict before the game begins and after it ends
     if game_state is None:
         return None
+    features = []
+    walls_around_position = wall_around(game_state["field"], game_state["self"][3])
+    features += walls_around_position
 
+    coin_features = []
+    for index in range(9):
+        if index >= len(game_state["coins"]):
+            coin_features += [0, 0, 0, 0, 0]
+        else:
+            coin = game_state['coins'][index]
+            coin_features += coin_information(coin, game_state["self"][3])
+    features += coin_features
     # For example, you could construct several channels of equal shape, ...
-    channels = []
-    channels.append(...)
+    #channels = []
+    #channels.append(...)
     # concatenate them as a feature tensor (they must have the same shape), ...
-    stacked_channels = np.stack(channels)
+    #stacked_channels = np.stack(channels)
     # and return them as a vector
-    return stacked_channels.reshape(-1)
+    #return stacked_channels.reshape(-1)
+    return features
+
+def coin_information(coin_position, player_position) -> List[int]:
+    coin_distance = abs(coin_position[0]-player_position[0]) + abs(coin_position[1]-player_position[1])
+    coin_left = 1 if coin_position[0] < player_position[0] else 0
+    coin_right = 1 if coin_position[0] > player_position[0] else 0
+    coin_up = 1 if coin_position[1] < player_position[1] else 0
+    coin_down = 1 if coin_position[1] > player_position[1] else 0
+    return [coin_distance, coin_left, coin_right, coin_up, coin_down]
+
+def wall_around(field, position) -> List[int]:
+    wall_left = 1 if field[position[0]-1, position[1]] == -1 else 0
+    wall_right = 1 if field[position[0]+1, position[1]] == -1 else 0
+    wall_up = 1 if field[position[0], position[1]-1] == -1 else 0
+    wall_down = 1 if field[position[0], position[1]+1] == -1 else 0
+    return [wall_left, wall_right, wall_up, wall_down]

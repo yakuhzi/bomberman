@@ -2,6 +2,7 @@ import pickle
 import random
 from collections import namedtuple, deque
 from typing import List
+from agent_code.agent_007.model import Linear_QNet, QTrainer
 
 import events as e
 from .callbacks import state_to_features
@@ -29,6 +30,8 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
+    self.model = Linear_QNet(49, 256, 5)
+    self.trainer = QTrainer(self.model, lr=0.001, gamma=0.9)
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -51,11 +54,29 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
     # Idea: Add your own events to hand out rewards
-    if ...:
-        events.append(PLACEHOLDER_EVENT)
+    #if ...:
+     #   events.append(PLACEHOLDER_EVENT)
 
+    if old_game_state is not None:
+        old_state = state_to_features(old_game_state)
+        new_state = state_to_features(new_game_state)
+
+        self.trainer.train_step(old_state, map_action(self_action), reward_from_events(self, events), new_state)
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
+
+
+def map_action(self_action: str) -> List[int]:
+    if self_action == "UP":
+        return [1, 0, 0, 0, 0]
+    elif self_action == "RIGHT":
+        return [0, 1, 0, 0, 0]
+    elif self_action == "DOWN":
+        return [0, 0, 1, 0, 0]
+    elif self_action == "LEFT":
+        return [0, 0, 0, 1, 0]
+    else:
+        return [0, 0, 0, 0, 1]
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
@@ -71,8 +92,16 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     :param self: The same object that is passed to all of your callbacks.
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
-    self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
+    if len(self.transitions) > 1000:
+        mini_sample = random.sample(self.transitions, 1000)  # list of tuples
+    else:
+        mini_sample = self.transitions
+    states, actions, next_states, rewards = zip(*mini_sample)
+    #print("END")
 
+    mapped_actions = list(map(lambda action: map_action(action), actions))
+    self.trainer.train_step(states, mapped_actions, rewards, next_states)
+    self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
@@ -86,19 +115,23 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 1,
-        e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -10,
-        e.GOT_KILLED: -10,
-        e.OPPONENT_ELIMINATED: 1,
-        e.WAITED: -0.1,
-        e.BOMB_DROPPED: 0,
-        e.BOMB_EXPLODED: 0,
-        e.CRATE_DESTROYED: 0.4,
-        e.COIN_FOUND: 0.5,
-        e.INVALID_ACTION: -0.5,
-        e.SURVIVED_ROUND: 0.5,
-        #PLACEHOLDER_EVENT: -.1  # idea: the custom event is bad
+        e.COIN_COLLECTED: 100,
+        # e.KILLED_OPPONENT: 5,
+        # e.KILLED_SELF: -10,
+        # e.GOT_KILLED: -10,
+        # e.OPPONENT_ELIMINATED: 1,
+        e.WAITED: -20,
+        # e.BOMB_DROPPED: 0,
+        # e.BOMB_EXPLODED: 0,
+        # e.CRATE_DESTROYED: 0.4,
+        # e.COIN_FOUND: 0.5,
+        e.INVALID_ACTION: -30,
+        e.MOVED_UP: -5,
+        e.MOVED_DOWN: -5,
+        e.MOVED_LEFT: -5,
+        e.MOVED_RIGHT: -5
+        # e.SURVIVED_ROUND: 0.5,
+        # PLACEHOLDER_EVENT: -.1  # idea: the custom event is bad
     }
     reward_sum = 0
     for event in events:
