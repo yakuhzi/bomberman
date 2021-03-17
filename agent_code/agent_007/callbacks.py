@@ -6,6 +6,11 @@ from typing import List
 
 import numpy as np
 
+from pathfinding.core.diagonal_movement import DiagonalMovement
+from pathfinding.core.grid import Grid
+from pathfinding.finder.a_star import AStarFinder
+
+
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']#, 'BOMB']
 
@@ -44,21 +49,17 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     random_prob = .1
-    if self.train and random.random() < random_prob:
+    if random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
-        ac = np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .2])
-        #print("ac", ac)
-        return ac
+        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .2])
 
     self.logger.debug("Querying model for action.")
-    #return np.random.choice(ACTIONS, p=self.model)
 
     state = state_to_features(game_state)
     state0 = torch.tensor(state, dtype=torch.float)
     prediction = self.model(state0)
     move = torch.argmax(prediction).item()
-    #print(ACTIONS[move], move)
     return ACTIONS[move]
 
 
@@ -83,13 +84,17 @@ def state_to_features(game_state: dict) -> np.array:
     walls_around_position = wall_around(game_state["field"], game_state["self"][3])
     features += walls_around_position
 
+    min_coin_distance = 100
     coin_features = []
-    for index in range(9):
-        if index >= len(game_state["coins"]):
-            coin_features += [0, 0, 0, 0, 0]
-        else:
-            coin = game_state['coins'][index]
-            coin_features += coin_information(coin, game_state["self"][3])
+    field = field_to_obstacle_matrix(game_state["field"])
+    for coin in game_state['coins']:
+        #coin = game_state['coins'][index]
+
+        min_coin_features = coin_information(coin, game_state["self"][3], min_coin_distance, field)
+
+        if min_coin_features is not None:
+            coin_features = min_coin_features
+            min_coin_distance = coin_features[0]
     features += coin_features
     # For example, you could construct several channels of equal shape, ...
     #channels = []
@@ -100,13 +105,26 @@ def state_to_features(game_state: dict) -> np.array:
     #return stacked_channels.reshape(-1)
     return features
 
-def coin_information(coin_position, player_position) -> List[int]:
-    coin_distance = abs(coin_position[0]-player_position[0]) + abs(coin_position[1]-player_position[1])
-    coin_left = 1 if coin_position[0] < player_position[0] else 0
-    coin_right = 1 if coin_position[0] > player_position[0] else 0
-    coin_up = 1 if coin_position[1] < player_position[1] else 0
-    coin_down = 1 if coin_position[1] > player_position[1] else 0
-    return [coin_distance, coin_left, coin_right, coin_up, coin_down]
+
+def field_to_obstacle_matrix(field) -> List[List[int]]:
+    field[field == 1] = -2
+    field[field == 0] = 1
+    return field
+
+
+def coin_information(coin_position, player_position, min_coin_distance, field):
+    grid = Grid(matrix=field)
+    start = grid.node(player_position[0], player_position[1])
+    end = grid.node(coin_position[0], coin_position[1])
+    finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
+    path, runs = finder.find_path(start, end, grid)
+    if len(path) < min_coin_distance:
+        coin_left = 1 if coin_position[0] < player_position[0] else 0
+        coin_right = 1 if coin_position[0] > player_position[0] else 0
+        coin_up = 1 if coin_position[1] < player_position[1] else 0
+        coin_down = 1 if coin_position[1] > player_position[1] else 0
+        return [len(path), coin_left, coin_right, coin_up, coin_down]
+
 
 def wall_around(field, position) -> List[int]:
     wall_left = 1 if field[position[0]-1, position[1]] == -1 else 0
