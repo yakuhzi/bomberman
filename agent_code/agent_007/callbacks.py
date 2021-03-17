@@ -94,7 +94,7 @@ def state_to_features(game_state: dict) -> np.array:
     return features
 
 
-def wall_around(field: np.narray, position: Tuple[int, int]) -> List[int]:
+def wall_around(field: np.array, position: Tuple[int, int]) -> List[int]:
     wall_left = 1 if field[position[0] - 1, position[1]] == -1 else 0
     wall_right = 1 if field[position[0] + 1, position[1]] == -1 else 0
     wall_up = 1 if field[position[0], position[1] - 1] == -1 else 0
@@ -102,7 +102,7 @@ def wall_around(field: np.narray, position: Tuple[int, int]) -> List[int]:
     return [wall_left, wall_right, wall_up, wall_down]
 
 
-def coin_information(field: np.narray, coin_position: Tuple[int, int], player_position: Tuple[int, int]) -> List[int]:
+def coin_information(field: np.array, coin_position: Tuple[int, int], player_position: Tuple[int, int]) -> List[int]:
     grid = Grid(matrix=field)
 
     start = grid.node(player_position[0], player_position[1])
@@ -117,7 +117,7 @@ def coin_information(field: np.narray, coin_position: Tuple[int, int], player_po
     return [len(path), coin_left, coin_right, coin_up, coin_down]
 
 
-def field_to_obstacle_matrix(field: np.narray) -> List[List[int]]:
+def field_to_obstacle_matrix(field: np.array) -> List[List[int]]:
     field[field == 1] = -2
     field[field == 0] = 1
     return field

@@ -118,7 +118,6 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     if score >= self.highscore and total_reward > self.highest_reward:
         self.highscore = score
         self.highest_reward = total_reward
-        print(self.highscore, self.highest_reward)
 
         # Store the model
         with open("my-saved-model.pt", "wb") as file:
