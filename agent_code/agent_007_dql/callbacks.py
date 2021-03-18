@@ -5,8 +5,7 @@ import random
 import torch
 from typing import List, Tuple
 
-from agent_code.agent_007.coin_bfs import CoinBFS
-from agent_code.agent_007.q_learning_lva import get_best_action
+from agent_code.agent_007_dql.coin_bfs import CoinBFS
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']  # , 'BOMB']
 
@@ -50,9 +49,12 @@ def act(self, game_state: dict) -> str:
         return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .2])
 
     self.logger.debug("Querying model for action.")
-    state = state_to_features(game_state)
 
-    return get_best_action(self.model, state)
+    state = state_to_features(game_state)
+    state0 = torch.tensor(state, dtype=torch.float)
+    prediction = self.model(state0)
+    action_index = torch.argmax(prediction).item()
+    return ACTIONS[action_index]
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -102,3 +104,8 @@ def coin_information(field: np.array, coins: List[Tuple[int, int]], player_posit
 
     return [distance, coin_left, coin_right, coin_up, coin_down]
 
+
+def field_to_obstacle_matrix(field: np.array) -> List[List[int]]:
+    field[field == 1] = -2
+    field[field == 0] = 1
+    return field
