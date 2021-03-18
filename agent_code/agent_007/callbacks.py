@@ -3,10 +3,9 @@ import os
 import pickle
 import random
 import torch
-from pathfinding.core.diagonal_movement import DiagonalMovement
-from pathfinding.core.grid import Grid
-from pathfinding.finder.a_star import AStarFinder
 from typing import List, Tuple
+
+from agent_code.agent_007.coin_bfs import CoinBFS
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']  # , 'BOMB']
 
@@ -80,17 +79,9 @@ def state_to_features(game_state: dict) -> np.array:
     walls_around_position = wall_around(game_state["field"], game_state["self"][3])
     features += walls_around_position
 
-    min_coin_distance = 100
-    coin_features = []
-    field = field_to_obstacle_matrix(game_state["field"])
-    for coin in game_state['coins']:
-        information = coin_information(field, coin, game_state["self"][3])
-
-        if information[0] < min_coin_distance:
-            coin_features = information
-            min_coin_distance = information[0]
-
+    coin_features = coin_information(game_state["field"], game_state['coins'], game_state["self"][3])
     features += coin_features
+
     return features
 
 
@@ -102,19 +93,16 @@ def wall_around(field: np.array, position: Tuple[int, int]) -> List[int]:
     return [wall_left, wall_right, wall_up, wall_down]
 
 
-def coin_information(field: np.array, coin_position: Tuple[int, int], player_position: Tuple[int, int]) -> List[int]:
-    grid = Grid(matrix=field)
-
-    start = grid.node(player_position[0], player_position[1])
-    end = grid.node(coin_position[0], coin_position[1])
-    finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
-    path, runs = finder.find_path(start, end, grid)
+def coin_information(field: np.array, coins: List[Tuple[int, int]], player_position: Tuple[int, int]) -> List[int]:
+    coin_bfs = CoinBFS(field, coins)
+    distance, coin_position = coin_bfs.get_distance(player_position)
 
     coin_left = 1 if coin_position[0] < player_position[0] else 0
     coin_right = 1 if coin_position[0] > player_position[0] else 0
     coin_up = 1 if coin_position[1] < player_position[1] else 0
     coin_down = 1 if coin_position[1] > player_position[1] else 0
-    return [len(path), coin_left, coin_right, coin_up, coin_down]
+
+    return [distance, coin_left, coin_right, coin_up, coin_down]
 
 
 def field_to_obstacle_matrix(field: np.array) -> List[List[int]]:

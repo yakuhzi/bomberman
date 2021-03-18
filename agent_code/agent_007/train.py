@@ -14,8 +14,7 @@ from .callbacks import state_to_features
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 # Hyper parameters -- DO modify
-TRANSITION_HISTORY_SIZE = 20  # keep only ... last transitions
-RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
+TRANSITION_HISTORY_SIZE = 5  # keep only ... last transitions
 
 # Events
 LOOP_EVENT = "LOOP_EVENT"
@@ -39,8 +38,6 @@ def setup_training(self):
     self.rounds = []
     self.average_coins = []
     self.average_steps = []
-    self.highscore = 0
-    self.highest_reward = -float('inf')
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -112,16 +109,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     states, actions, next_states, rewards = zip(*mini_sample)
     self.trainer.train_step(states, actions, next_states, rewards)
 
-    score = last_game_state["self"][1]
     total_reward = np.sum(rewards)
-
-    if score >= self.highscore and total_reward > self.highest_reward:
-        self.highscore = score
-        self.highest_reward = total_reward
-
-        # Store the model
-        with open("my-saved-model.pt", "wb") as file:
-            pickle.dump(self.model, file)
 
     self.coins.append(total_reward)
     self.steps.append(last_game_state['step'])
@@ -132,6 +120,10 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     Visualization.show_rounds_statistic(self.rounds, self.coins, self.average_coins)
     Visualization.show_rounds_statistic(self.rounds, self.steps, self.average_steps)
+
+    # Store the model
+    with open("my-saved-model.pt", "wb") as file:
+        pickle.dump(self.model, file)
 
 
 def reward_from_events(self, events: List[str]) -> int:
