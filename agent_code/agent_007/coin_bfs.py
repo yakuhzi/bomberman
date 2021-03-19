@@ -35,7 +35,7 @@ class CoinBFS:
         self.queue.append((x, y, 0))
 
         # Store min distance and coordinates of nearest coin
-        min_dist = float("inf")
+        min_dist = 0
         min_coin = (0, 0)
 
         # Loop until queue is empty

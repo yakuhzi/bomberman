@@ -20,6 +20,9 @@ TRANSITION_HISTORY_SIZE = 5  # keep only ... last transitions
 LOOP_EVENT = "LOOP_EVENT"
 MOVED_TOWARDS_COIN = "MOVED_TOWARDS_COIN"
 MOVED_AWAY_FROM_COIN = "MOVED_AWAY_FROM_COIN"
+SURVIVED_BOMB = "SURVIVED_BOMB"
+MOVED_TOWARDS_BOMB = "MOVED_TOWARDS_BOMB"
+MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
 
 
 def setup_training(self):
@@ -31,7 +34,7 @@ def setup_training(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    self.model = LinearQNet(9, 256, 5)
+    self.model = LinearQNet(19, 256, 6)
     self.trainer = QTrainer(self.model, lr=0.001, gamma=0.9)
     self.rewards = []
     self.steps = []
@@ -63,21 +66,11 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if old_game_state is None:
         return
 
-    if loop_detected(self):
-        events.append(LOOP_EVENT)
-
     old_state_features = state_to_features(old_game_state)
     new_state_features = state_to_features(new_game_state)
-
-    old_distance = old_state_features[4]
-    new_distance = new_state_features[4]
-
-    if new_distance < old_distance:
-        events.append(MOVED_TOWARDS_COIN)
-    elif new_distance - old_distance == 1:
-        events.append(MOVED_AWAY_FROM_COIN)
-
     mapped_action = map_action(self_action)
+
+    auxillary_events(self, events, old_state_features, new_state_features)
     rewards = reward_from_events(self, events)
 
     transition = Transition(old_state_features, mapped_action, new_state_features, rewards)
@@ -99,6 +92,15 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     :param self: The same object that is passed to all of your callbacks.
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
+
+    last_state_features = state_to_features(last_game_state)
+    mapped_action = map_action(last_action)
+
+    auxillary_events(self, events, last_state_features, last_state_features)
+    rewards = reward_from_events(self, events)
+
+    transition = Transition(last_state_features, mapped_action, last_state_features, rewards)
+    self.transitions.append(transition)
 
     if len(self.transitions) > TRANSITION_HISTORY_SIZE:
         mini_sample = random.sample(self.transitions, TRANSITION_HISTORY_SIZE)
@@ -125,6 +127,31 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         pickle.dump(self.model, file)
 
 
+def auxillary_events(self, events: List[str], old_state_features: List[int], new_state_features: List[int]):
+    old_distance = old_state_features[13]
+    new_distance = new_state_features[13]
+
+    if old_distance - new_distance == 1:
+        events.append(MOVED_TOWARDS_COIN)
+    elif new_distance - old_distance == 1:
+        events.append(MOVED_AWAY_FROM_COIN)
+
+    old_bomb_distance = old_state_features[8]
+    new_bomb_distance = new_state_features[8]
+
+    if e.BOMB_EXPLODED not in events:
+        if old_bomb_distance - new_bomb_distance == 1:
+            events.append(MOVED_TOWARDS_BOMB)
+        elif new_bomb_distance - old_bomb_distance == 1:
+            events.append(MOVED_AWAY_FROM_BOMB)
+
+    if e.BOMB_EXPLODED in events and e.KILLED_SELF not in events:
+        events.append(SURVIVED_BOMB)
+
+    if loop_detected(self.transitions):
+        events.append(LOOP_EVENT)
+
+
 def reward_from_events(self, events: List[str]) -> int:
     """
     *This is not a required function, but an idea to structure your code.*
@@ -135,23 +162,26 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 10,
         # e.KILLED_OPPONENT: 5,
-        # e.KILLED_SELF: -10,
+        e.KILLED_SELF: -10,
         # e.GOT_KILLED: -10,
         # e.OPPONENT_ELIMINATED: 1,
         e.WAITED: -2,
-        # e.BOMB_DROPPED: 0,
+        e.BOMB_DROPPED: -2,
         # e.BOMB_EXPLODED: 0,
-        # e.CRATE_DESTROYED: 0.4,
-        # e.COIN_FOUND: 0.5,
+        e.CRATE_DESTROYED: 5,
+        e.COIN_FOUND: 0.5,
         e.INVALID_ACTION: -5,
         e.MOVED_UP: -1,
         e.MOVED_DOWN: -1,
         e.MOVED_LEFT: -1,
         e.MOVED_RIGHT: -1,
         LOOP_EVENT: -5,
+        e.SURVIVED_ROUND: 10,
         MOVED_TOWARDS_COIN: 1.5,
         MOVED_AWAY_FROM_COIN: -1.5,
-        # e.SURVIVED_ROUND: 0.5,
+        SURVIVED_BOMB: 2,
+        MOVED_AWAY_FROM_BOMB: 3.5,
+        MOVED_TOWARDS_BOMB: -3.5,
     }
 
     reward_sum = 0
@@ -166,23 +196,25 @@ def reward_from_events(self, events: List[str]) -> int:
 
 def map_action(self_action: str) -> List[int]:
     if self_action == "UP":
-        return [1, 0, 0, 0, 0]
+        return [1, 0, 0, 0, 0, 0]
     elif self_action == "RIGHT":
-        return [0, 1, 0, 0, 0]
+        return [0, 1, 0, 0, 0, 0]
     elif self_action == "DOWN":
-        return [0, 0, 1, 0, 0]
+        return [0, 0, 1, 0, 0, 0]
     elif self_action == "LEFT":
-        return [0, 0, 0, 1, 0]
-    else:
-        return [0, 0, 0, 0, 1]
+        return [0, 0, 0, 1, 0, 0]
+    elif self_action == "WAIT":
+        return [0, 0, 0, 0, 1, 0]
+    else:  # BOMB
+        return [0, 0, 0, 0, 0, 1]
 
 
-def loop_detected(self) -> bool:
-    if len(self.transitions) <= 3:
+def loop_detected(transitions: deque) -> bool:
+    if len(transitions) <= 3:
         return False
 
-    if self.transitions[-1].action == self.transitions[-3].action and self.transitions[-1].action != \
-            self.transitions[-2].action and self.transitions[-2].action == self.transitions[-4].action:
+    if transitions[-1].action == transitions[-3].action and transitions[-1].action != \
+            transitions[-2].action and transitions[-2].action == transitions[-4].action:
         return True
 
     return False

@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 from agent_code.agent_007.coin_bfs import CoinBFS
 
-ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']  # , 'BOMB']
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
 
 def setup(self):
@@ -42,12 +42,12 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     random_prob = 0.05
-    random_prob_train = 0.3
+    random_prob_train = max(0.5 - game_state["round"] / 100, 0) + 0.1
 
     if random.random() < (random_prob_train if self.train else random_prob):
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
-        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .2])
+        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, 0.1])
 
     self.logger.debug("Querying model for action.")
 
@@ -77,12 +77,24 @@ def state_to_features(game_state: dict) -> np.array:
         return None
 
     features = []
+    # 0-3
     walls_around_position = wall_around(game_state["field"], game_state["self"][3])
     features += walls_around_position
 
+    # 4-7
+    explosion_around_position = explosion_around(game_state["explosion_map"], game_state["self"][3])
+    features += explosion_around_position
+
+    # 8-12
+    bomb_features = bomb_information(game_state["field"], game_state['bombs'], game_state["self"][3])
+    features += bomb_features
+
+    # 13-17
     coin_features = coin_information(game_state["field"], game_state['coins'], game_state["self"][3])
     features += coin_features
 
+    # 18
+    features.append(1 if game_state["self"][2] else 0)  # Player has bomb
     return features
 
 
@@ -94,7 +106,38 @@ def wall_around(field: np.array, position: Tuple[int, int]) -> List[int]:
     return [wall_left, wall_right, wall_up, wall_down]
 
 
+def explosion_around(explosion_map: np.array, position: Tuple[int, int]) -> List[int]:
+    explosion_left = 1 if explosion_map[position[0] - 1, position[1]] > 1 else 0
+    explosion_right = 1 if explosion_map[position[0] + 1, position[1]] > 1 else 0
+    explosion_up = 1 if explosion_map[position[0], position[1] - 1] > 1 else 0
+    explosion_down = 1 if explosion_map[position[0], position[1] + 1] > 1 else 0
+    return [explosion_left, explosion_right, explosion_up, explosion_down]
+
+
+def bomb_information(field: np.array, bombs: List[Tuple[int, int]], player_position: Tuple[int, int]) -> List[int]:
+    if len(bombs) == 0:
+        return [0, 0, 0, 0, 0]
+
+    bombs = list(map(lambda bomb: bomb[0], bombs))
+
+    bomb_bfs = CoinBFS(field, bombs)
+    distance, coin_position = bomb_bfs.get_distance(player_position)
+
+    if distance == 0:
+        return [0, 1, 1, 1, 1]
+
+    bomb_left = 1 if coin_position[0] < player_position[0] else 0
+    bomb_right = 1 if coin_position[0] > player_position[0] else 0
+    bomb_up = 1 if coin_position[1] < player_position[1] else 0
+    bomb_down = 1 if coin_position[1] > player_position[1] else 0
+
+    return [distance, bomb_left, bomb_right, bomb_up, bomb_down]
+
+
 def coin_information(field: np.array, coins: List[Tuple[int, int]], player_position: Tuple[int, int]) -> List[int]:
+    if len(coins) == 0:
+        return [0, 0, 0, 0, 0]
+
     coin_bfs = CoinBFS(field, coins)
     distance, coin_position = coin_bfs.get_distance(player_position)
 
