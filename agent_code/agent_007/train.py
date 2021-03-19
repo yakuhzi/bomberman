@@ -33,10 +33,9 @@ def setup_training(self):
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
     self.model = LinearQNet(9, 256, 5)
     self.trainer = QTrainer(self.model, lr=0.001, gamma=0.9)
-    self.coins = []
+    self.rewards = []
     self.steps = []
-    self.rounds = []
-    self.average_coins = []
+    self.average_rewards = []
     self.average_steps = []
 
 
@@ -111,15 +110,14 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     total_reward = np.sum(rewards)
 
-    self.coins.append(total_reward)
+    self.rewards.append(total_reward)
     self.steps.append(last_game_state['step'])
-    self.rounds.append(last_game_state['round'])
 
-    self.average_coins.append(np.sum(self.coins) / len(self.coins))
+    self.average_rewards.append(np.sum(self.rewards) / len(self.rewards))
     self.average_steps.append(np.sum(self.steps) / len(self.steps))
 
-    Visualization.show_rounds_statistic(self.rounds, self.coins, self.average_coins)
-    Visualization.show_rounds_statistic(self.rounds, self.steps, self.average_steps)
+    Visualization.show_statistic("Reward", last_game_state["round"], self.rewards, self.average_rewards)
+    Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
 
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
