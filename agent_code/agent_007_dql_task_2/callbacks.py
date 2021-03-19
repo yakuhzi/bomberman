@@ -147,9 +147,3 @@ def coin_information(field: np.array, coins: List[Tuple[int, int]], player_posit
     coin_down = 1 if coin_position[1] > player_position[1] else 0
 
     return [distance, coin_left, coin_right, coin_up, coin_down]
-
-
-def field_to_obstacle_matrix(field: np.array) -> List[List[int]]:
-    field[field == 1] = -2
-    field[field == 0] = 1
-    return field
