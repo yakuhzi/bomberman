@@ -2,11 +2,9 @@ from collections import namedtuple, deque
 
 import numpy as np
 import pickle
-import random
 from typing import List
 
 import events as e
-from agent_code.agent_007.model import LinearQNet, QTrainer
 from agent_code.agent_007.visualization import Visualization
 from .callbacks import state_to_features
 
@@ -36,10 +34,9 @@ def setup_training(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    self.coins = []
+    self.rewards = []
     self.steps = []
-    self.rounds = []
-    self.average_coins = []
+    self.average_rewards = []
     self.average_steps = []
     self.model = initialize_model()
     self.rounds_in_loop = 0
@@ -126,15 +123,15 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     _, _, _, rewards = zip(*self.transitions)
     total_reward = np.sum(rewards)
 
-    self.coins.append(total_reward)
+    self.rewards.append(total_reward)
     self.steps.append(last_game_state['step'])
-    self.rounds.append(last_game_state['round'])
 
-    self.average_coins.append(np.sum(self.coins) / len(self.coins))
+    self.average_rewards.append(np.sum(self.rewards) / len(self.rewards))
     self.average_steps.append(np.sum(self.steps) / len(self.steps))
 
-    Visualization.show_rounds_statistic(self.rounds, self.coins, self.average_coins)
-    Visualization.show_rounds_statistic(self.rounds, self.steps, self.average_steps)
+    if "n_rounds" in last_game_state and last_game_state["round"] == last_game_state["n_rounds"]:
+        Visualization.show_statistic("Reward", last_game_state["round"], self.rewards, self.average_rewards)
+        Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
 
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
 
@@ -166,7 +163,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_DOWN: -1,
         e.MOVED_LEFT: -1,
         e.MOVED_RIGHT: -1,
-        LOOP_EVENT: -5 - self.rounds_in_loop,
+        LOOP_EVENT: -5,
         MOVED_TOWARDS_COIN: 1.5,
         MOVED_AWAY_FROM_COIN: -1.5,
         # e.SURVIVED_ROUND: 0.5,

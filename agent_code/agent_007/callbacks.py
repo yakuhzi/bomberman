@@ -2,7 +2,6 @@ import numpy as np
 import os
 import pickle
 import random
-import torch
 from typing import List, Tuple
 
 from agent_code.agent_007.coin_bfs import CoinBFS
@@ -42,9 +41,10 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    random_prob = 0.1
+    random_prob = 0.05
+    random_prob_train = 0.3
 
-    if random.random() < random_prob:
+    if random.random() < (random_prob_train if self.train else random_prob):
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
         return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .2])
