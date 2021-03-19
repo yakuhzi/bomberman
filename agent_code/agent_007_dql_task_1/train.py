@@ -6,8 +6,8 @@ import random
 from typing import List
 
 import events as e
-from agent_code.agent_007_dql.model import LinearQNet, QTrainer
-from agent_code.agent_007_dql.visualization import Visualization
+from agent_code.agent_007_dql_task_1.model import LinearQNet, QTrainer
+from agent_code.agent_007_dql_task_1.visualization import Visualization
 from .callbacks import state_to_features
 
 # This is only an example!

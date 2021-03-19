@@ -3,7 +3,7 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
-      <excludeFolder url="file://$MODULE_DIR$/agent_code/agent_007/logs" />
+      <excludeFolder url="file://$MODULE_DIR$/agent_code/agent_007_lva_task_1/logs" />
       <excludeFolder url="file://$MODULE_DIR$/agent_code/rule_based_agent/logs" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.8 (ml_project)" jdkType="Python SDK" />

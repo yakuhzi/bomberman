@@ -5,7 +5,7 @@ import pickle
 from typing import List
 
 import events as e
-from agent_code.agent_007.visualization import Visualization
+from agent_code.agent_007_lva_task_1.visualization import Visualization
 from .callbacks import state_to_features
 
 # This is only an example!
