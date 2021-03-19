@@ -18,7 +18,7 @@ from fallbacks import pygame
 from items import Coin, Explosion, Bomb
 
 WorldArgs = namedtuple("WorldArgs",
-                       ["no_gui", "fps", "turn_based", "update_interval", "save_replay", "replay", "make_video", "continue_without_training", "log_dir"])
+                       ["no_gui", "fps", "turn_based", "update_interval", "save_replay", "replay", "make_video", "continue_without_training", "log_dir", "n_rounds"])
 
 
 class Trophy:
@@ -384,6 +384,7 @@ class BombeRLeWorld(GenericWorld):
     def get_state_for_agent(self, agent: Agent):
         state = {
             'round': self.round,
+            'n_rounds': self.args.n_rounds,
             'step': self.step,
             'field': np.array(self.arena),
             'self': agent.get_state(),

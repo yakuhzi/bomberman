@@ -116,8 +116,9 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.average_rewards.append(np.sum(self.rewards) / len(self.rewards))
     self.average_steps.append(np.sum(self.steps) / len(self.steps))
 
-    Visualization.show_statistic("Reward", last_game_state["round"], self.rewards, self.average_rewards)
-    Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
+    if "n_rounds" in last_game_state and last_game_state["round"] == last_game_state["n_rounds"]:
+        Visualization.show_statistic("Reward", last_game_state["round"], self.rewards, self.average_rewards)
+        Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
 
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
