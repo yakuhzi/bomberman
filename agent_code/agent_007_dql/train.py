@@ -2,22 +2,19 @@ from collections import namedtuple, deque
 
 import numpy as np
 import pickle
+import random
 from typing import List
 
 import events as e
-from agent_code.agent_007.visualization import Visualization
+from agent_code.agent_007_dql.model import LinearQNet, QTrainer
+from agent_code.agent_007_dql.visualization import Visualization
 from .callbacks import state_to_features
 
 # This is only an example!
-from .q_learning_lva import update_q_function
-
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 # Hyper parameters -- DO modify
-TRANSITION_HISTORY_SIZE = 1000  # keep only ... last transitions
-
-# TODO: get dynamically
-NUMBER_OF_FEATURES = 9
+TRANSITION_HISTORY_SIZE = 5  # keep only ... last transitions
 
 # Events
 LOOP_EVENT = "LOOP_EVENT"
@@ -34,24 +31,13 @@ def setup_training(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    self.rewards = []
+    self.model = LinearQNet(9, 256, 5)
+    self.trainer = QTrainer(self.model, lr=0.001, gamma=0.9)
+    self.coins = []
     self.steps = []
-    self.average_rewards = []
+    self.rounds = []
+    self.average_coins = []
     self.average_steps = []
-    self.model = initialize_model()
-    self.rounds_in_loop = 0
-    self.rounds_waited = 0
-
-
-def initialize_model():
-    model = {
-        'UP': np.zeros(NUMBER_OF_FEATURES),
-        'RIGHT': np.zeros(NUMBER_OF_FEATURES),
-        'DOWN': np.zeros(NUMBER_OF_FEATURES),
-        'LEFT': np.zeros(NUMBER_OF_FEATURES),
-        'WAIT': np.zeros(NUMBER_OF_FEATURES),
-    }
-    return model
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -92,18 +78,13 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     elif new_distance - old_distance == 1:
         events.append(MOVED_AWAY_FROM_COIN)
 
-    if 'WAITED' in events:
-        self.rounds_waited += 1
-    else:
-        self.rounds_in_loop = 0
-
+    mapped_action = map_action(self_action)
     rewards = reward_from_events(self, events)
 
-    if old_state_features is not None and new_state_features is not None:
-        transition = Transition(old_state_features, self_action, new_state_features, rewards)
-        self.transitions.append(transition)
+    transition = Transition(old_state_features, mapped_action, new_state_features, rewards)
+    self.transitions.append(transition)
 
-        self.model = update_q_function(self.model, self.transitions, self_action)
+    self.trainer.train_step(old_state_features, mapped_action, new_state_features, rewards)
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
@@ -120,20 +101,25 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
 
-    _, _, _, rewards = zip(*self.transitions)
+    if len(self.transitions) > TRANSITION_HISTORY_SIZE:
+        mini_sample = random.sample(self.transitions, TRANSITION_HISTORY_SIZE)
+    else:
+        mini_sample = self.transitions
+
+    states, actions, next_states, rewards = zip(*mini_sample)
+    self.trainer.train_step(states, actions, next_states, rewards)
+
     total_reward = np.sum(rewards)
 
-    self.rewards.append(total_reward)
+    self.coins.append(total_reward)
     self.steps.append(last_game_state['step'])
+    self.rounds.append(last_game_state['round'])
 
-    self.average_rewards.append(np.sum(self.rewards) / len(self.rewards))
+    self.average_coins.append(np.sum(self.coins) / len(self.coins))
     self.average_steps.append(np.sum(self.steps) / len(self.steps))
 
-    if "n_rounds" in last_game_state and last_game_state["round"] == last_game_state["n_rounds"]:
-        Visualization.show_statistic("Reward", last_game_state["round"], self.rewards, self.average_rewards)
-        Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
-
-    self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
+    Visualization.show_rounds_statistic(self.rounds, self.coins, self.average_coins)
+    Visualization.show_rounds_statistic(self.rounds, self.steps, self.average_steps)
 
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
@@ -148,12 +134,12 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 100,
+        e.COIN_COLLECTED: 10,
         # e.KILLED_OPPONENT: 5,
         # e.KILLED_SELF: -10,
         # e.GOT_KILLED: -10,
         # e.OPPONENT_ELIMINATED: 1,
-        e.WAITED: -2 - self.rounds_waited,
+        e.WAITED: -2,
         # e.BOMB_DROPPED: 0,
         # e.BOMB_EXPLODED: 0,
         # e.CRATE_DESTROYED: 0.4,
@@ -164,7 +150,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_LEFT: -1,
         e.MOVED_RIGHT: -1,
         LOOP_EVENT: -5,
-        MOVED_TOWARDS_COIN: 1.5,
+        MOVED_TOWARDS_COIN: 0.5,
         MOVED_AWAY_FROM_COIN: -1.5,
         # e.SURVIVED_ROUND: 0.5,
     }
@@ -179,13 +165,25 @@ def reward_from_events(self, events: List[str]) -> int:
     return reward_sum
 
 
+def map_action(self_action: str) -> List[int]:
+    if self_action == "UP":
+        return [1, 0, 0, 0, 0]
+    elif self_action == "RIGHT":
+        return [0, 1, 0, 0, 0]
+    elif self_action == "DOWN":
+        return [0, 0, 1, 0, 0]
+    elif self_action == "LEFT":
+        return [0, 0, 0, 1, 0]
+    else:
+        return [0, 0, 0, 0, 1]
+
+
 def loop_detected(self) -> bool:
     if len(self.transitions) <= 3:
         return False
 
     if self.transitions[-1].action == self.transitions[-3].action and self.transitions[-1].action != \
             self.transitions[-2].action and self.transitions[-2].action == self.transitions[-4].action:
-        self.rounds_in_loop += 1
         return True
-    self.rounds_in_loop = 0
+
     return False
