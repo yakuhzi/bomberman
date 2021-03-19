@@ -8,7 +8,7 @@ from typing import List, Tuple
 from agent_code.agent_007.coin_bfs import CoinBFS
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']  # , 'BOMB']
-
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def setup(self):
     """
@@ -29,7 +29,7 @@ def setup(self):
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
-            self.model = pickle.load(file)
+            self.qnetwork_local = pickle.load(file)
 
 
 def act(self, game_state: dict) -> str:
@@ -41,7 +41,13 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    random_prob = 0.1
+    current_game_state = np.array(state_to_features(game_state))
+    state = torch.from_numpy(current_game_state).float().unsqueeze(0).to(device)
+    # ?? was macht train()??
+    self.qnetwork_local.eval()
+    self.qnetwork_local.train()
+
+    random_prob = 0.3
 
     if random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
@@ -49,11 +55,13 @@ def act(self, game_state: dict) -> str:
         return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .2])
 
     self.logger.debug("Querying model for action.")
-
-    state = state_to_features(game_state)
+    #print(state)
     state0 = torch.tensor(state, dtype=torch.float)
-    prediction = self.model(state0)
+    #print(state0)
+    prediction = self.qnetwork_local(state0)
+    #print(prediction)
     action_index = torch.argmax(prediction).item()
+    #print(action_index)
     return ACTIONS[action_index]
 
 
@@ -94,6 +102,9 @@ def wall_around(field: np.array, position: Tuple[int, int]) -> List[int]:
 
 
 def coin_information(field: np.array, coins: List[Tuple[int, int]], player_position: Tuple[int, int]) -> List[int]:
+    if len(coins) == 0:
+        return [0, 0, 0, 0, 0]
+
     coin_bfs = CoinBFS(field, coins)
     distance, coin_position = coin_bfs.get_distance(player_position)
 
