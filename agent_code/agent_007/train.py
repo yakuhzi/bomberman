@@ -150,7 +150,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_LEFT: -1,
         e.MOVED_RIGHT: -1,
         LOOP_EVENT: -5,
-        MOVED_TOWARDS_COIN: 0.5,
+        MOVED_TOWARDS_COIN: 1.5,
         MOVED_AWAY_FROM_COIN: -1.5,
         # e.SURVIVED_ROUND: 0.5,
     }
