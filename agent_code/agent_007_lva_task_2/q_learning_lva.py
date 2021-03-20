@@ -1,7 +1,7 @@
 import numpy as np
 
 TRAINING_RATE = 0.001
-GAMMA = 0.8
+GAMMA = 0.65
 BATCH_SIZE = 100
 
 

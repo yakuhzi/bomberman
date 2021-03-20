@@ -2,10 +2,11 @@ from collections import namedtuple, deque
 
 import numpy as np
 import pickle
-from typing import List
+from typing import List, Tuple, Optional
+from math import isclose
 
 import events as e
-from agent_code.agent_007_lva_task_1.visualization import Visualization
+from agent_code.agent_007_lva_task_2.visualization import Visualization
 from .callbacks import state_to_features
 
 # This is only an example!
@@ -15,9 +16,10 @@ Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'
 
 # Hyper parameters -- DO modify
 TRANSITION_HISTORY_SIZE = 1000  # keep only ... last transitions
+ACTION_HISTORY_SIZE = 10  # number of last actions for loop detection
 
 # TODO: get dynamically
-NUMBER_OF_FEATURES = 19
+NUMBER_OF_FEATURES = 21
 
 # Events
 LOOP_EVENT = "LOOP_EVENT"
@@ -26,6 +28,8 @@ MOVED_AWAY_FROM_COIN = "MOVED_AWAY_FROM_COIN"
 SURVIVED_BOMB = "SURVIVED_BOMB"
 MOVED_TOWARDS_BOMB = "MOVED_TOWARDS_BOMB"
 MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
+USELESS_BOMB = "USELESS_BOMB"
+USEFUL_BOMB = "USEFUL_BOMB"
 
 
 def setup_training(self):
@@ -37,11 +41,12 @@ def setup_training(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
+    self.action_history = deque(maxlen=ACTION_HISTORY_SIZE)
+    self.model = initialize_model()
     self.rewards = []
     self.steps = []
     self.average_rewards = []
     self.average_steps = []
-    self.model = initialize_model()
 
 
 def initialize_model():
@@ -75,21 +80,11 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     """
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
-    # Idea: Add your own events to hand out rewards
-
     if old_game_state is None:
         return
 
-    old_state_features = state_to_features(old_game_state)
-    new_state_features = state_to_features(new_game_state)
-
-    auxillary_events(self, events, old_state_features, new_state_features)
-    rewards = reward_from_events(self, events)
-
-    transition = Transition(old_state_features, self_action, new_state_features, rewards)
-    self.transitions.append(transition)
-
-    self.model = update_q_function(self.model, self.transitions, self_action)
+    # Update model
+    update_model(self, old_game_state, self_action, new_game_state, events)
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
@@ -106,59 +101,93 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
 
-    last_state_features = state_to_features(last_game_state)
+    # Update model
+    update_model(self, last_game_state, last_action, None, events)
 
-    auxillary_events(self, events, last_state_features, last_state_features)
-    rewards = reward_from_events(self, events)
-
-    transition = Transition(last_state_features, last_action, last_state_features, rewards)
-    self.transitions.append(transition)
-
-    self.model = update_q_function(self.model, self.transitions, last_action)
-
-    _, _, _, rewards = zip(*self.transitions)
+    # Calculate total rewards
+    round_transitions = np.array(self.transitions, dtype=object)[-last_game_state["step"]:]
+    _, _, _, rewards = zip(*round_transitions)
     total_reward = np.sum(rewards)
 
+    # Append statistics
     self.rewards.append(total_reward)
     self.steps.append(last_game_state['step'])
 
+    # Calculate average statistics
     self.average_rewards.append(np.sum(self.rewards) / len(self.rewards))
     self.average_steps.append(np.sum(self.steps) / len(self.steps))
 
+    # Plot training statistics after last round
     if "n_rounds" in last_game_state and last_game_state["round"] == last_game_state["n_rounds"]:
         Visualization.show_statistic("Reward", last_game_state["round"], self.rewards, self.average_rewards)
         Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
 
-    self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
+    # Reset action history
+    self.action_history = deque(maxlen=ACTION_HISTORY_SIZE)
+    #self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
 
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
 
-def auxillary_events(self, events: List[str], old_state_features: List[int], new_state_features: List[int]):
-    old_distance = old_state_features[13]
-    new_distance = new_state_features[13]
+def update_model(self, old_game_state: dict, action: str, new_game_state: Optional[dict], events: List[str]):
+    # Convert state to features
+    old_state_features = state_to_features(old_game_state)
+    new_state_features = np.zeros(NUMBER_OF_FEATURES) if new_game_state is None else state_to_features(new_game_state)
 
-    if old_distance - new_distance == 1:
-        events.append(MOVED_TOWARDS_COIN)
-    elif new_distance - old_distance == 1:
-        events.append(MOVED_AWAY_FROM_COIN)
+    # Add auxiliary events
+    if new_game_state is not None:
+        add_auxiliary_events(self, events, old_state_features, new_state_features, action)
 
-    old_bomb_distance = old_state_features[8]
-    new_bomb_distance = new_state_features[8]
+    # Calculate reward
+    reward = reward_from_events(self, events)
 
+    # Add transition to memory
+    transition = Transition(old_state_features, action, new_state_features, reward)
+    self.transitions.append(transition)
+
+    # Update model
+    self.model = update_q_function(self.model, self.transitions, action)
+
+
+def add_auxiliary_events(
+    self,
+    events: List[str],
+    old_state_features: List[int],
+    new_state_features: List[int],
+    action: Optional[str]
+):
     if e.BOMB_EXPLODED not in events:
-        if old_bomb_distance - new_bomb_distance == 1:
+        old_bomb_distance = old_state_features[4]
+        new_bomb_distance = new_state_features[4]
+
+        if isclose(old_bomb_distance - new_bomb_distance, 1 / 20, abs_tol=0.01):
             events.append(MOVED_TOWARDS_BOMB)
-        elif new_bomb_distance - old_bomb_distance == 1:
+        elif isclose(new_bomb_distance - old_bomb_distance, 1 / 20, abs_tol=0.01):
             events.append(MOVED_AWAY_FROM_BOMB)
 
     if e.BOMB_EXPLODED in events and e.KILLED_SELF not in events:
         events.append(SURVIVED_BOMB)
 
-    if loop_detected(self.transitions):
+    if e.BOMB_DROPPED in events and old_state_features[20] == 0:
+        events.append(USELESS_BOMB)
+
+    if e.BOMB_DROPPED in events and old_state_features[20] == 1:
+        events.append(USEFUL_BOMB)
+
+    if action is not None and loop_detected(self, action):
         events.append(LOOP_EVENT)
+
+    # Add coin event if no bomb event
+    if new_state_features[4] == 0 and new_state_features[5] == 0:
+        old_coin_distance = old_state_features[9]
+        new_coin_distance = new_state_features[9]
+
+        if isclose(old_coin_distance - new_coin_distance, 1 / 20, abs_tol=0.01):
+            events.append(MOVED_TOWARDS_COIN)
+        elif isclose(new_coin_distance - old_coin_distance, 1 / 20, abs_tol=0.01):
+            events.append(MOVED_AWAY_FROM_COIN)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -171,26 +200,28 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 10,
         # e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -10,
+        e.KILLED_SELF: -20,
         # e.GOT_KILLED: -10,
         # e.OPPONENT_ELIMINATED: 1,
-        e.WAITED: -2,
+        e.WAITED: -0.2,
         e.BOMB_DROPPED: -2,
         # e.BOMB_EXPLODED: 0,
-        e.CRATE_DESTROYED: 5,
+        e.CRATE_DESTROYED: 3,
         e.COIN_FOUND: 0.5,
         e.INVALID_ACTION: -5,
-        e.MOVED_UP: -1,
-        e.MOVED_DOWN: -1,
-        e.MOVED_LEFT: -1,
-        e.MOVED_RIGHT: -1,
-        LOOP_EVENT: -5,
-        e.SURVIVED_ROUND: 10,
+        e.MOVED_UP: -0.1,
+        e.MOVED_DOWN: -0.1,
+        e.MOVED_LEFT: -0.1,
+        e.MOVED_RIGHT: -0.1,
+        # e.SURVIVED_ROUND: 10,
+        LOOP_EVENT: -2,
         MOVED_TOWARDS_COIN: 1.5,
         MOVED_AWAY_FROM_COIN: -1.5,
-        SURVIVED_BOMB: 2,
-        MOVED_AWAY_FROM_BOMB: 3.5,
-        MOVED_TOWARDS_BOMB: -3.5,
+        SURVIVED_BOMB: 1.8,
+        MOVED_AWAY_FROM_BOMB: 2.5,
+        MOVED_TOWARDS_BOMB: -2.5,
+        USELESS_BOMB: -5,
+        USEFUL_BOMB: 3
     }
 
     reward_sum = 0
@@ -199,19 +230,18 @@ def reward_from_events(self, events: List[str]) -> int:
         if event in game_rewards:
             reward_sum += game_rewards[event]
 
-    if not self.train:
-        print(reward_sum, events)
+    # print(reward_sum, events)
 
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
 
 
-def loop_detected(transitions: deque) -> bool:
-    if len(transitions) <= 3:
+def loop_detected(self, action: str) -> bool:
+    # Append action to queue
+    self.action_history.append(action)
+
+    if len(self.action_history) <= 3:
         return False
 
-    if transitions[-1].action == transitions[-3].action and transitions[-1].action != \
-        transitions[-2].action and transitions[-2].action == transitions[-4].action:
-        return True
-
-    return False
+    return self.action_history[-1] == self.action_history[-3] and self.action_history[-1] != \
+           self.action_history[-2] and self.action_history[-2] == self.action_history[-4]

@@ -5,7 +5,7 @@ import random
 import torch
 from typing import List, Tuple
 
-from agent_code.agent_007.coin_bfs import CoinBFS
+from agent_code.agent_007_dql_task_2.bfs import BFS
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
@@ -41,16 +41,17 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    random_prob = 0.05
+    random_prob = 0
     random_prob_train = max(0.5 - game_state["round"] / 100, 0) + 0.1
+
+    # input("Press Enter to continue...")
 
     if random.random() < (random_prob_train if self.train else random_prob):
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
-        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, 0.1])
+        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
 
     self.logger.debug("Querying model for action.")
-
     state = state_to_features(game_state)
     state0 = torch.tensor(state, dtype=torch.float)
     prediction = self.model(state0)
@@ -76,42 +77,58 @@ def state_to_features(game_state: dict) -> np.array:
     if game_state is None:
         return None
 
+    field = game_state["field"]
+    explosion_map = game_state["explosion_map"]
+    position = game_state["self"][3]
+    bombs = game_state["bombs"]
+    coins = game_state["coins"]
+
     features = []
+
     # 0-3
-    walls_around_position = wall_around(game_state["field"], game_state["self"][3])
-    features += walls_around_position
+    obstacle_features = obstacle_information(field, explosion_map, bombs, position)
+    features += obstacle_features
 
-    # 4-7
-    explosion_around_position = explosion_around(game_state["explosion_map"], game_state["self"][3])
-    features += explosion_around_position
-
-    # 8-12
-    bomb_features = bomb_information(game_state["field"], game_state['bombs'], game_state["self"][3])
+    # 4-8
+    bomb_features = bomb_information(field, bombs, position)
     features += bomb_features
 
-    # 13-17
-    coin_features = coin_information(game_state["field"], game_state['coins'], game_state["self"][3])
+    # 9-13
+    coin_features = coin_information(field, coins, position)
     features += coin_features
 
-    # 18
+    # 14-18
+    crate_features = crate_information(field, position)
+    features += crate_features
+
+    # 19
     features.append(1 if game_state["self"][2] else 0)  # Player has bomb
+    # 20
+    features.append(bomb_destroys_crate(field, position))  # Bomb would destroy crate
     return features
 
 
-def wall_around(field: np.array, position: Tuple[int, int]) -> List[int]:
-    wall_left = 1 if field[position[0] - 1, position[1]] == -1 else 0
-    wall_right = 1 if field[position[0] + 1, position[1]] == -1 else 0
-    wall_up = 1 if field[position[0], position[1] - 1] == -1 else 0
-    wall_down = 1 if field[position[0], position[1] + 1] == -1 else 0
-    return [wall_left, wall_right, wall_up, wall_down]
+def obstacle_information(
+    field: np.array,
+    explosion_map: np.array,
+    bombs: List[Tuple[Tuple[int, int], bool]],
+    position: Tuple[int, int]
+) -> List[int]:
+    # Add explosion map to field (ignore explosions with lifetime of 1)
+    field = field.copy()
+    field[explosion_map > 1] = 2
 
+    # Add bombs to field
+    for bomb in bombs:
+        field[bomb[0][0], bomb[0][1]] = 3
 
-def explosion_around(explosion_map: np.array, position: Tuple[int, int]) -> List[int]:
-    explosion_left = 1 if explosion_map[position[0] - 1, position[1]] > 1 else 0
-    explosion_right = 1 if explosion_map[position[0] + 1, position[1]] > 1 else 0
-    explosion_up = 1 if explosion_map[position[0], position[1] - 1] > 1 else 0
-    explosion_down = 1 if explosion_map[position[0], position[1] + 1] > 1 else 0
-    return [explosion_left, explosion_right, explosion_up, explosion_down]
+    # Check if fields are free
+    obstacle_left = 1 if field[position[0] - 1, position[1]] != 0 else 0
+    obstacle_right = 1 if field[position[0] + 1, position[1]] != 0 else 0
+    obstacle_up = 1 if field[position[0], position[1] - 1] != 0 else 0
+    obstacle_down = 1 if field[position[0], position[1] + 1] != 0 else 0
+
+    return [obstacle_left, obstacle_right, obstacle_up, obstacle_down]
 
 
 def bomb_information(field: np.array, bombs: List[Tuple[int, int]], player_position: Tuple[int, int]) -> List[int]:
@@ -120,7 +137,7 @@ def bomb_information(field: np.array, bombs: List[Tuple[int, int]], player_posit
 
     bombs = list(map(lambda bomb: bomb[0], bombs))
 
-    bomb_bfs = CoinBFS(field, bombs)
+    bomb_bfs = BFS(field.copy(), bombs)
     distance, coin_position = bomb_bfs.get_distance(player_position)
 
     if distance == 0:
@@ -131,14 +148,14 @@ def bomb_information(field: np.array, bombs: List[Tuple[int, int]], player_posit
     bomb_up = 1 if coin_position[1] < player_position[1] else 0
     bomb_down = 1 if coin_position[1] > player_position[1] else 0
 
-    return [distance, bomb_left, bomb_right, bomb_up, bomb_down]
+    return [distance / 20, bomb_left, bomb_right, bomb_up, bomb_down]
 
 
 def coin_information(field: np.array, coins: List[Tuple[int, int]], player_position: Tuple[int, int]) -> List[int]:
     if len(coins) == 0:
         return [0, 0, 0, 0, 0]
 
-    coin_bfs = CoinBFS(field, coins)
+    coin_bfs = BFS(field, coins)
     distance, coin_position = coin_bfs.get_distance(player_position)
 
     coin_left = 1 if coin_position[0] < player_position[0] else 0
@@ -146,4 +163,45 @@ def coin_information(field: np.array, coins: List[Tuple[int, int]], player_posit
     coin_up = 1 if coin_position[1] < player_position[1] else 0
     coin_down = 1 if coin_position[1] > player_position[1] else 0
 
-    return [distance, coin_left, coin_right, coin_up, coin_down]
+    return [distance / 20, coin_left, coin_right, coin_up, coin_down]
+
+
+def crate_information(field: np.array, player_position: Tuple[int, int]) -> List[int]:
+    crate_bfs = BFS(field.copy(), None)
+    distance, crate_position = crate_bfs.get_distance(player_position)
+
+    crate_left = 1 if crate_position[0] < player_position[0] else 0
+    crate_right = 1 if crate_position[0] > player_position[0] else 0
+    crate_up = 1 if crate_position[1] < player_position[1] else 0
+    crate_down = 1 if crate_position[1] > player_position[1] else 0
+
+    return [distance / 20, crate_left, crate_right, crate_up, crate_down]
+
+
+def bomb_destroys_crate(field: np.array, position: Tuple[int, int]) -> int:
+    left_free = True
+    right_free = True
+    up_free = True
+    down_free = True
+
+    for i in range(1, 2):
+        if position[0] - i >= 0 and field[position[0] - i, position[1]] == -1:
+            left_free = False
+        if position[0] + i < field.shape[0] and field[position[0] + i, position[1]] == -1:
+            right_free = False
+        if position[1] - i >= 0 and field[position[0], position[1] - i] == -1:
+            up_free = False
+        if position[1] + i < field.shape[1] and field[position[0], position[1] + i] == -1:
+            down_free = False
+
+        if left_free and position[0] - i >= 0 and field[position[0] - i, position[1]] == 1:
+            return 1
+        if right_free and position[0] + i < field.shape[0] and field[position[0] + i, position[1]] == 1:
+            return 1
+        if up_free and position[1] - i >= 0 and field[position[0], position[1] - i] == 1:
+            return 1
+        if down_free and position[1] + i < field.shape[1] and field[position[0], position[1] + i] == 1:
+            return 1
+
+    return 0
+

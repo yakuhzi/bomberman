@@ -4,7 +4,7 @@ import numpy as np
 from typing import Tuple, List
 
 
-class CoinBFS:
+class BFS:
     def __init__(self, field: np.array, coins: List[Tuple[int, int]]):
         self.field = field
 
@@ -17,13 +17,16 @@ class CoinBFS:
         self.visited = [[False for x in range(self.N)] for y in range(self.M)]
         self.queue = deque()
 
-        for coin in coins:
-            x, y = coin
-            self.field[x, y] = 2
+        if coins is not None:
+            for coin in coins:
+                x, y = coin
+                self.field[x, y] = 2
+        else:
+            field[field == 1] = 2
 
     def is_valid(self, row: int, col: int) -> bool:
-        return (row >= 0) and (row < self.M) and (col >= 0) and (col < self.N) and self.field[row][col] != -1 and not \
-            self.visited[row][col]
+        return (row >= 0) and (row < self.M) and (col >= 0) and (col < self.N) and self.field[row][col] != -1 \
+               and self.field[row][col] != 1 and not self.visited[row][col]
 
     def get_distance(self, position: Tuple[int, int]) -> Tuple[int, Tuple[int, int]]:
         x, y = position
@@ -35,7 +38,7 @@ class CoinBFS:
         self.queue.append((x, y, 0))
 
         # Store min distance and coordinates of nearest coin
-        min_dist = float("inf")
+        min_dist = 0
         min_coin = (0, 0)
 
         # Loop until queue is empty
