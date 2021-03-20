@@ -129,7 +129,7 @@ def main(argv = None):
                         return
                     elif event.type == pygame.KEYDOWN:
                         key_pressed = event.key
-                        if key_pressed in (pygame.K_q, pygame.K_ESCAPE):
+                        if key_pressed in (pygame.K_q, pygame.K_ESCAPE) and world.running:
                             world.end_round()
                         if not world.running:
                             round_finished = True
