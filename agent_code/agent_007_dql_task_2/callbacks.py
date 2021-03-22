@@ -6,6 +6,7 @@ import torch
 from typing import List, Tuple
 
 from agent_code.agent_007_dql_task_2.bfs import BFS
+from agent_code.agent_007_dql_task_2.callbacks_rule_based import act_rule_based, setup_rule_based
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
@@ -26,6 +27,7 @@ def setup(self):
     """
     if self.train or not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
+        setup_rule_based(self)
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
@@ -41,15 +43,14 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    random_prob = 0
-    random_prob_train = max(0.5 - game_state["round"] / 100, 0) + 0.1
+    random_prob = max(0.5 - game_state["round"] / 100, 0) + 0.1
 
     # input("Press Enter to continue...")
-
-    if random.random() < (random_prob_train if self.train else random_prob):
+    if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
-        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
+        # return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
+        return act_rule_based(self, game_state)
 
     self.logger.debug("Querying model for action.")
     state = state_to_features(game_state)
