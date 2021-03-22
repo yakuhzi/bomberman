@@ -2,11 +2,11 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from agent_code.agent_007_lva_berkeley_task_2.callbacks import state_to_features, get_q_value
+from .callbacks import state_to_features, get_q_value
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
-TRAINING_RATE = 0.01
-GAMMA = 0.85
+ALPHA = 0.1
+GAMMA = 0.9
 
 
 def update_q_function(model: dict, old_state: dict, action: str, new_state: Optional[dict], reward: float) -> Dict[str, float]:
@@ -14,7 +14,7 @@ def update_q_function(model: dict, old_state: dict, action: str, new_state: Opti
     features = state_to_features(old_state, action)
 
     for feature in features:
-        model[feature] += TRAINING_RATE * temporal_difference * features[feature]
+        model[feature] += ALPHA * temporal_difference * features[feature]
 
     return model
 

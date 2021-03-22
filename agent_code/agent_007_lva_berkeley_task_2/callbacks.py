@@ -4,8 +4,7 @@ import pickle
 import random
 from typing import List, Tuple
 
-from agent_code.agent_007_lva_berkeley_task_2.bfs import BFS
-from agent_code.agent_007_lva_berkeley_task_2.callbacks_rule_based import act_rule_based, setup_rule_based
+from .bfs import BFS
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
@@ -26,7 +25,6 @@ def setup(self):
     """
     if self.train or not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
-        setup_rule_based(self)
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
@@ -42,17 +40,16 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    random_prob_train = max(0.7 - game_state["round"] / 100, 0) + 0.1
+    random_prob = 0.3
 
-    # input("Press Enter to continue...")
+    # input()
 
-    if self.train:
-        if game_state["step"] < 10:
-            self.logger.debug("Choosing action rule based.")
-            return act_rule_based(self, game_state)
-        elif random.random() < random_prob_train:
-            self.logger.debug("Choosing action purely at random.")
-            return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
+    if self.train and random.random() < random_prob:
+        self.logger.debug("Choosing action purely at random.")
+        action = np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
+        if action == 'BOMB':
+            print("RANDOM BOMB")
+        return action
 
     self.logger.debug("Querying model for action.")
     return get_best_action(self.model, game_state)
@@ -85,11 +82,21 @@ def state_to_features(game_state: dict, action: str) -> np.array:
     position = game_state["self"][3]
     has_bomb = game_state["self"][2]
 
-    is_action_valid = action_information(field, position, has_bomb, action)
-    features["valid_action"] = 0 if is_action_valid else 1
+    is_action_valid = action_information(field, bombs, position, has_bomb, action)
+    features["invalid_action"] = 1 if not is_action_valid else 0
 
-    features["useful_bomb"] = 0
-    features["has_bomb"] = 1 if has_bomb else 0
+    features["useless_bomb"] = 0
+    # features["has_bomb"] = 1 if has_bomb else 0
+
+    if has_bomb:
+        if position[0] - 1 >= 0 and field[position[0] - 1, position[1]] == 1:
+            features["useless_bomb"] = 1
+        elif position[0] + 1 < field.shape[0] and field[position[0] + 1, position[1]] == 1:
+            features["useless_bomb"] = 1
+        elif position[1] - 1 >= 0 and field[position[0], position[1] - 1] == 1:
+            features["useless_bomb"] = 1
+        elif position[1] + 1 < field.shape[1] and field[position[0], position[1] + 1] == 1:
+            features["useless_bomb"] = 1
 
     if is_action_valid:
         if action == 'LEFT':
@@ -101,17 +108,9 @@ def state_to_features(game_state: dict, action: str) -> np.array:
         elif action == 'DOWN':
             position = position[0], position[1] + 1
         elif action == 'BOMB':
-            bombs.append((position, 3))
-            features["has_bomb"] = 0
-
-            if position[0] - 1 >= 0 and field[position[0] - 1, position[1]] == 1:
-                features["useful_bomb"] = 1
-            elif position[0] + 1 < field.shape[0] and field[position[0] + 1, position[1]] == 1:
-                features["useful_bomb"] = 1
-            elif position[1] - 1 >= 0 and field[position[0], position[1] - 1] == 1:
-                features["useful_bomb"] = 1
-            elif position[1] + 1 < field.shape[1] and field[position[0], position[1] + 1] == 1:
-                features["useful_bomb"] = 1
+            # bombs.append((position, 3))
+            features["useless_bomb"] = 0
+            # features["has_bomb"] = 0
 
     danger = danger_ahead(explosion_map, position)
     features["danger_ahead"] = 1 if danger else 0
@@ -144,14 +143,16 @@ def get_best_action(model: dict, state: dict) -> str:
     return ACTIONS[best_index]
 
 
-def action_information(field: np.array, position: Tuple[int, int], has_bomb: bool, action: str) -> bool:
-    if action == 'LEFT' and field[position[0] - 1, position[1]] != -1 and field[position[0] - 1, position[1]] != 1:
+def action_information(field: np.array, bombs: List[Tuple[Tuple[int, int], int]], position: Tuple[int, int], has_bomb: bool, action: str) -> bool:
+    bombs = list(map(lambda bomb: bomb[0], bombs))
+
+    if action == 'LEFT' and field[position[0] - 1, position[1]] != -1 and field[position[0] - 1, position[1]] != 1 and (position[0] - 1, position[1]) not in bombs:
         return True
-    elif action == 'RIGHT' and field[position[0] + 1, position[1]] != -1 and field[position[0] + 1, position[1]] != 1:
+    elif action == 'RIGHT' and field[position[0] + 1, position[1]] != -1 and field[position[0] + 1, position[1]] != 1 and (position[0] + 1, position[1]) not in bombs:
         return True
-    elif action == 'UP' and field[position[0], position[1] - 1] != -1 and field[position[0], position[1] - 1] != 1:
+    elif action == 'UP' and field[position[0], position[1] - 1] != -1 and field[position[0], position[1] - 1] != 1 and (position[0], position[1] - 1) not in bombs:
         return True
-    elif action == 'DOWN' and field[position[0], position[1] + 1] != -1 and field[position[0], position[1] + 1] != 1:
+    elif action == 'DOWN' and field[position[0], position[1] + 1] != -1 and field[position[0], position[1] + 1] != 1 and (position[0], position[1] + 1) not in bombs:
         return True
     elif action == 'BOMB' and has_bomb:
         return True
@@ -182,7 +183,11 @@ def bomb_distance(field: np.array, bombs: List[Tuple[int, int]], player_position
 
     bomb_bfs = BFS(field.copy(), bombs)
     distance, bomb_position = bomb_bfs.get_distance(player_position)
-    return (distance + 1) / 5
+
+    if distance > 3:
+        return 0
+
+    return (4 - distance) / 4
 
 
 def crate_distance(field: np.array, player_position: Tuple[int, int]) -> float:
