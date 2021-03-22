@@ -40,15 +40,14 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    random_prob = 0.3
-
-    # input()
+    random_prob = 0.3-(0.3/(101-game_state["round"]))
+    #input()
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
         action = np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
-        if action == 'BOMB':
-            print("RANDOM BOMB")
+        # if action == 'BOMB':
+        #     print("RANDOM BOMB")
         return action
 
     self.logger.debug("Querying model for action.")
@@ -88,6 +87,8 @@ def state_to_features(game_state: dict, action: str) -> np.array:
     features["useless_bomb"] = 0
     # features["has_bomb"] = 1 if has_bomb else 0
 
+    bomb_dist_before_move = bomb_distance(field, bombs, position)
+
     if has_bomb:
         if position[0] - 1 >= 0 and field[position[0] - 1, position[1]] == 1:
             features["useless_bomb"] = 1
@@ -123,6 +124,13 @@ def state_to_features(game_state: dict, action: str) -> np.array:
 
     bomb_feature = bomb_distance(field, bombs, position)
     features["bomb_distance"] = bomb_feature
+
+    features["dead_end"] = 0
+    if bomb_dist_before_move == 1:
+        if is_action_valid:
+            features["dead_end"] = dead_end(field, position, action)
+        else:
+            features["dead_end"] = 1
 
     return features
 
@@ -197,4 +205,56 @@ def crate_distance(field: np.array, player_position: Tuple[int, int]) -> float:
     crate_bfs = BFS(field.copy(), None)
     distance, coin_position = crate_bfs.get_distance(player_position)
     return (distance + 1) / 15
+
+
+def dead_end(field: np.array, position: Tuple[int, int], action: str) -> int:
+    max_straight = None
+
+    for i in range(1, 4):
+        if action == 'LEFT' and field[position[0] - i, position[1]] != 0:
+            max_straight = i-1
+            break
+        elif action == 'RIGHT' and field[position[0] + i, position[1]] != 0:
+            max_straight = i-1
+            break
+        elif action == 'UP' and field[position[0], position[1]-i] != 0:
+            max_straight = i-1
+            break
+        elif action == 'DOWN' and field[position[0], position[1]+i] != 0:
+            max_straight = i-1
+            break
+
+    if max_straight is None:
+        return 0
+
+    if max_straight > 2:
+        return 0
+    #print(max_straight)
+    for i in range(max_straight+1):
+        if action == 'LEFT':
+            # left and than up/down to escape bomb
+            new_position = (position[0] - i, position[1])
+            if field[new_position[0], new_position[1]-1] == 0 or field[new_position[0], new_position[1]+1] == 0:
+                return 0
+        elif action == 'RIGHT':
+            # right and than up/down to escape bomb
+            new_position = (position[0] + i, position[1])
+            if field[new_position[0], new_position[1]-1] == 0 or field[new_position[0], new_position[1]+1] == 0:
+                return 0
+        elif action == 'UP':
+            # up and than left/right to escape bomb
+            new_position = (position[0], position[1]-i)
+            if field[new_position[0]-1, new_position[1]] == 0 or field[new_position[0]+1, new_position[1]] == 0:
+                return 0
+        elif action == 'DOWN':
+            # down and than left/right to escape bomb
+            new_position = (position[0], position[1]+i)
+            if field[new_position[0]-1, new_position[1]] == 0 or field[new_position[0]+1, new_position[1]] == 0:
+                return 0
+    if action == 'WAIT':
+        return 1
+    elif action == 'BOMB':
+        return 0
+    return 1
+
 

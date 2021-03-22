@@ -25,6 +25,7 @@ WAITED_IN_DANGER = "WAITED_IN_DANGER"
 USELESS_BOMB = "USELESS_BOMB"
 USEFUL_BOMB = "USEFUL_BOMB"
 SURVIVED_BOMB = "SURVIVED_BOMB"
+DEAD_END = "DEAD_END"
 
 
 def setup_training(self):
@@ -55,6 +56,7 @@ def initialize_model():
         "crate_distance": 0,
         "useless_bomb": 0,
         "danger_ahead": 0,
+        "dead_end": 0
         # "has_bomb": 0
     }
 
@@ -139,7 +141,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 def update_model(self, old_game_state: dict, self_action: str, new_game_state: Optional[dict], events: List[str]):
     # Convert state to features
     current_features = state_to_features(old_game_state, self_action)
-    print(self_action, current_features)
+    #print(self_action, current_features)
 
     # Add auxiliary events
     if len(self.transitions) > 1:
@@ -181,6 +183,8 @@ def add_auxiliary_events(self, events: List[str], current_features: dict):
             events.append(MOVED_TOWARDS_BOMB)
         elif isclose(old_bomb_distance - new_bomb_distance, 0.25, abs_tol=0.05):
             events.append(MOVED_AWAY_FROM_BOMB)
+    if current_features["dead_end"] == 1 and e.INVALID_ACTION not in events and "WAITED" not in events:
+        events.append(DEAD_END)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -193,13 +197,13 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 10,
         # e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -20,
+        e.KILLED_SELF: -100,
         # e.GOT_KILLED: -10,
         # e.OPPONENT_ELIMINATED: 1,
         e.WAITED: -0.1,
         e.BOMB_DROPPED: 0,
         # e.BOMB_EXPLODED: 0,
-        e.CRATE_DESTROYED: 3,
+        e.CRATE_DESTROYED: 4,
         e.COIN_FOUND: 0.5,
         e.INVALID_ACTION: -5,
         e.MOVED_UP: -0.1,
@@ -214,7 +218,8 @@ def reward_from_events(self, events: List[str]) -> int:
         MOVED_TOWARDS_BOMB: -3.5,
         USELESS_BOMB: -15,
         USEFUL_BOMB: 10,
-        WAITED_IN_DANGER: -2
+        WAITED_IN_DANGER: -2,
+        DEAD_END: -7
         # SURVIVED_BOMB: 10.8,
     }
 
@@ -224,7 +229,7 @@ def reward_from_events(self, events: List[str]) -> int:
         if event in game_rewards:
             reward_sum += game_rewards[event]
 
-    print(reward_sum, events)
+    #print(reward_sum, events)
 
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum

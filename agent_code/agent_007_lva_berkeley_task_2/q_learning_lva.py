@@ -15,7 +15,7 @@ def update_q_function(model: dict, old_state: dict, action: str, new_state: Opti
 
     for feature in features:
         model[feature] += ALPHA * temporal_difference * features[feature]
-
+    #print(action, features)
     return model
 
 
