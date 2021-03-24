@@ -4,8 +4,8 @@ import pickle
 import random
 from typing import List, Tuple
 
-from agent_code.agent_007_lva_task_2.bfs import BFS
-from agent_code.agent_007_lva_task_2.q_learning_lva import get_best_action
+from .bfs import BFS
+from .q_learning_lva import get_best_action
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 

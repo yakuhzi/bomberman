@@ -5,7 +5,7 @@ import random
 import torch
 from typing import List, Tuple
 
-from agent_code.agent_007_dql_task_1.coin_bfs import CoinBFS
+from .coin_bfs import CoinBFS
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']  # , 'BOMB']
 

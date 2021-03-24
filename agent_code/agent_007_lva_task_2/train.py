@@ -6,7 +6,7 @@ from typing import List, Tuple, Optional
 from math import isclose
 
 import events as e
-from agent_code.agent_007_lva_task_2.visualization import Visualization
+from .visualization import Visualization
 from .callbacks import state_to_features
 
 # This is only an example!
