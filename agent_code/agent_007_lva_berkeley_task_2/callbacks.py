@@ -86,7 +86,6 @@ def state_to_features(game_state: dict, action: str) -> np.array:
     features["invalid_action"] = 1 if not is_action_valid else 0
 
     features["useless_bomb"] = 0
-    # features["has_bomb"] = 1 if has_bomb else 0
 
     bomb_dist_before_move = bomb_distance(field, bombs, position)
 
@@ -110,9 +109,7 @@ def state_to_features(game_state: dict, action: str) -> np.array:
         elif action == 'DOWN':
             position = position[0], position[1] + 1
         elif action == 'BOMB':
-            # bombs.append((position, 3))
             features["useless_bomb"] = 0
-            # features["has_bomb"] = 0
 
     danger = danger_ahead(explosion_map, position)
     features["danger_ahead"] = 1 if danger else 0
@@ -127,6 +124,7 @@ def state_to_features(game_state: dict, action: str) -> np.array:
     features["bomb_distance"] = bomb_feature
 
     features["dead_end"] = 0
+
     if bomb_dist_before_move == 1:
         if is_action_valid:
             features["dead_end"] = dead_end(field, position, action)

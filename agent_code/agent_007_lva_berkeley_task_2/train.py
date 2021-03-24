@@ -53,7 +53,6 @@ def initialize_model():
         "useless_bomb": 0,
         "danger_ahead": 0,
         "dead_end": 0
-        # "has_bomb": 0
     }
 
 
