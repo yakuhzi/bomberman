@@ -2,7 +2,7 @@ from typing import Dict
 
 import numpy as np
 
-from agent_code.agent_007_lva_berkeley_task_1.callbacks import state_to_features, get_q_value
+from .callbacks import state_to_features, get_q_value
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']  # , 'BOMB']
 TRAINING_RATE = 0.001

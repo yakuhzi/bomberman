@@ -5,8 +5,8 @@ import random
 import torch
 from typing import List, Tuple
 
-from agent_code.agent_007_dql_task_2.bfs import BFS
-from agent_code.agent_007_dql_task_2.callbacks_rule_based import act_rule_based, setup_rule_based
+from .bfs import BFS
+from .callbacks_rule_based import act_rule_based, setup_rule_based
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 

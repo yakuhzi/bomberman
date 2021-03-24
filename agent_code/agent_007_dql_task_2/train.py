@@ -7,8 +7,8 @@ from typing import List, Optional
 from math import isclose
 
 import events as e
-from agent_code.agent_007_dql_task_2.model import LinearQNet, QTrainer
-from agent_code.agent_007_dql_task_2.visualization import Visualization
+from .model import LinearQNet, QTrainer
+from .visualization import Visualization
 from .callbacks import state_to_features
 
 # This is only an example!
