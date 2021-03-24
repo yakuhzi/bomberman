@@ -121,6 +121,9 @@ class Agent:
     def process_game_events(self, game_state):
         self.backend.send_event("game_events_occurred", self.last_game_state, self.last_action, game_state, self.events)
 
+    def process_game_events_DE(self, game_state, rewards):
+        self.backend.send_event("game_events_occurred", self.last_game_state, self.last_action, game_state, self.events, rewards)
+
     def wait_for_game_event_processing(self):
         self.backend.get("game_events_occurred")
 

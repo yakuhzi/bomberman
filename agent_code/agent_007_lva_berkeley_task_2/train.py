@@ -27,6 +27,35 @@ USEFUL_BOMB = "USEFUL_BOMB"
 SURVIVED_BOMB = "SURVIVED_BOMB"
 DEAD_END = "DEAD_END"
 
+game_rewards = {
+        e.COIN_COLLECTED: 10,
+        # e.KILLED_OPPONENT: 5,
+        e.KILLED_SELF: -100,
+        # e.GOT_KILLED: -10,
+        # e.OPPONENT_ELIMINATED: 1,
+        e.WAITED: -0.1,
+        e.BOMB_DROPPED: 0,
+        # e.BOMB_EXPLODED: 0,
+        e.CRATE_DESTROYED: 4,
+        e.COIN_FOUND: 0.5,
+        e.INVALID_ACTION: -5,
+        e.MOVED_UP: -0.1,
+        e.MOVED_DOWN: -0.1,
+        e.MOVED_LEFT: -0.1,
+        e.MOVED_RIGHT: -0.1,
+        e.SURVIVED_ROUND: 10,
+        # LOOP_EVENT: -5,
+        MOVED_TOWARDS_COIN: 1.5,
+        MOVED_AWAY_FROM_COIN: -1.5,
+        MOVED_AWAY_FROM_BOMB: 3.5,
+        MOVED_TOWARDS_BOMB: -3.5,
+        USELESS_BOMB: -15,
+        USEFUL_BOMB: 10,
+        WAITED_IN_DANGER: -2,
+        DEAD_END: -7
+        # SURVIVED_BOMB: 10.8,
+    }
+
 
 def setup_training(self):
     """
@@ -125,10 +154,10 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.average_invalid_actions.append(np.sum(self.total_invalid_actions) / len(self.total_invalid_actions))
 
     # Plot training statistics after last round
-    if "n_rounds" in last_game_state and last_game_state["round"] == last_game_state["n_rounds"]:
-        Visualization.show_statistic("Reward", last_game_state["round"], self.total_rewards, self.average_rewards)
-        Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
-        Visualization.show_statistic("Invalid Actions", last_game_state["round"], self.total_invalid_actions, self.average_invalid_actions)
+    #if "n_rounds" in last_game_state and last_game_state["round"] == last_game_state["n_rounds"]:
+    #    Visualization.show_statistic("Reward", last_game_state["round"], self.total_rewards, self.average_rewards)
+    #    Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
+    #    Visualization.show_statistic("Invalid Actions", last_game_state["round"], self.total_invalid_actions, self.average_invalid_actions)
 
     # Reset action history
     # self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
@@ -194,34 +223,6 @@ def reward_from_events(self, events: List[str]) -> int:
     Here you can modify the rewards your agent get so as to en/discourage
     certain behavior.
     """
-    game_rewards = {
-        e.COIN_COLLECTED: 10,
-        # e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -100,
-        # e.GOT_KILLED: -10,
-        # e.OPPONENT_ELIMINATED: 1,
-        e.WAITED: -0.1,
-        e.BOMB_DROPPED: 0,
-        # e.BOMB_EXPLODED: 0,
-        e.CRATE_DESTROYED: 4,
-        e.COIN_FOUND: 0.5,
-        e.INVALID_ACTION: -5,
-        e.MOVED_UP: -0.1,
-        e.MOVED_DOWN: -0.1,
-        e.MOVED_LEFT: -0.1,
-        e.MOVED_RIGHT: -0.1,
-        e.SURVIVED_ROUND: 10,
-        # LOOP_EVENT: -5,
-        MOVED_TOWARDS_COIN: 1.5,
-        MOVED_AWAY_FROM_COIN: -1.5,
-        MOVED_AWAY_FROM_BOMB: 3.5,
-        MOVED_TOWARDS_BOMB: -3.5,
-        USELESS_BOMB: -15,
-        USEFUL_BOMB: 10,
-        WAITED_IN_DANGER: -2,
-        DEAD_END: -7
-        # SURVIVED_BOMB: 10.8,
-    }
 
     reward_sum = 0
 
