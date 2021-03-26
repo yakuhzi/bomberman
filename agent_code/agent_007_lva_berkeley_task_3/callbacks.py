@@ -116,7 +116,7 @@ def state_to_features(game_state: dict, action: str) -> np.array:
         elif action == 'BOMB':
             features["drop_bomb"] = 0
 
-    danger = danger_ahead(explosion_map, position)
+    danger = danger_ahead(field, explosion_map, bombs, position)
     features["danger_ahead"] = 1 if danger else 0
 
     coin_feature = coin_distance(field, coins, position)
@@ -135,7 +135,7 @@ def state_to_features(game_state: dict, action: str) -> np.array:
 
     if bomb_dist_before_move == 1:
         if is_action_valid:
-            features["dead_end"] = dead_end(field, position, action)
+            features["dead_end"] = dead_end(field, agent_positons, position, action)
         else:
             features["dead_end"] = 1
 
@@ -167,16 +167,20 @@ def action_information(
     action: str
 ) -> bool:
     if action == 'LEFT' and field[position[0] - 1, position[1]] != -1 and field[position[0] - 1, position[1]] != 1 \
-        and (position[0] - 1, position[1]) not in bomb_positions and (position[0] - 1, position[1]) not in agent_positions:
+        and (position[0] - 1, position[1]) not in bomb_positions and (
+        position[0] - 1, position[1]) not in agent_positions:
         return True
     elif action == 'RIGHT' and field[position[0] + 1, position[1]] != -1 and field[position[0] + 1, position[1]] != 1 \
-        and (position[0] + 1, position[1]) not in bomb_positions and (position[0] + 1, position[1]) not in agent_positions:
+        and (position[0] + 1, position[1]) not in bomb_positions and (
+        position[0] + 1, position[1]) not in agent_positions:
         return True
     elif action == 'UP' and field[position[0], position[1] - 1] != -1 and field[position[0], position[1] - 1] != 1 \
-        and (position[0], position[1] - 1) not in bomb_positions and (position[0], position[1] - 1) not in agent_positions:
+        and (position[0], position[1] - 1) not in bomb_positions and (
+        position[0], position[1] - 1) not in agent_positions:
         return True
     elif action == 'DOWN' and field[position[0], position[1] + 1] != -1 and field[position[0], position[1] + 1] != 1 \
-        and (position[0], position[1] + 1) not in bomb_positions and (position[0], position[1] + 1) not in agent_positions:
+        and (position[0], position[1] + 1) not in bomb_positions and (
+        position[0], position[1] + 1) not in agent_positions:
         return True
     elif action == 'BOMB' and has_bomb:
         return True
@@ -186,7 +190,37 @@ def action_information(
     return False
 
 
-def danger_ahead(explosion_map: np.array, position: Tuple[int, int]) -> bool:
+def danger_ahead(
+    field: np.array, explosion_map: np.array, bombs: List[Tuple[int, int]], position: Tuple[int, int]
+) -> bool:
+    for bomb in [bomb for bomb in bombs if bomb[1] == 0]:
+        x, y = bomb[0]
+        explosion_map[x, y] = 3
+
+        for i in range(1, 4):
+            if 0 < x + i < 16:
+                if field[x - i, y] == -1:
+                    break
+                explosion_map[x - i, y] = 3
+
+        for i in range(1, 4):
+            if 0 < y + i < 16:
+                if field[x, y - i] == -1:
+                    break
+                explosion_map[x, y - i] = 3
+
+        for i in range(1, 4):
+            if 0 < x + i < 16:
+                if field[x + i, y] == -1:
+                    break
+                explosion_map[x + i, y] = 3
+
+        for i in range(1, 4):
+            if 0 < y + i < 16:
+                if field[x, y + i] == -1:
+                    break
+                explosion_map[x, y + i] = 3
+
     return explosion_map[position[0], position[1]] > 0
 
 
@@ -225,11 +259,11 @@ def crate_distance(field: np.array, position: Tuple[int, int]) -> float:
     return (distance + 1) / 15
 
 
-def agent_distance(field: np.array, agent_positons: List[Tuple[int, int]], position: Tuple[int, int]) -> float:
-    if len(agent_positons) == 0:
+def agent_distance(field: np.array, agent_positions: List[Tuple[int, int]], position: Tuple[int, int]) -> float:
+    if len(agent_positions) == 0:
         return 0
 
-    agent_bfs = BFS(field.copy(), agent_positons)
+    agent_bfs = BFS(field.copy(), agent_positions)
     distance, agent_position = agent_bfs.get_distance(position)
 
     number_of_crates = (field == 1).sum()
@@ -244,23 +278,27 @@ def agent_distance(field: np.array, agent_positons: List[Tuple[int, int]], posit
     return distance / 28
 
 
-def dead_end(field: np.array, position: Tuple[int, int], action: str) -> int:
+def dead_end(field: np.array, agent_positions: List[Tuple[int, int]], position: Tuple[int, int], action: str) -> int:
     if action == 'WAIT' or action == 'BOMB':
         return 0
 
     max_straight = None
 
     for i in range(1, 4):
-        if action == 'LEFT' and field[position[0] - i, position[1]] != 0:
+        if action == 'LEFT' and field[position[0] - i, position[1]] != 0 \
+            or (position[0] - 1, position[1]) in agent_positions:
             max_straight = i - 1
             break
-        elif action == 'RIGHT' and field[position[0] + i, position[1]] != 0:
+        elif action == 'RIGHT' and field[position[0] + i, position[1]] != 0 \
+            or (position[0] + 1, position[1]) in agent_positions:
             max_straight = i - 1
             break
-        elif action == 'UP' and field[position[0], position[1] - i] != 0:
+        elif action == 'UP' and field[position[0], position[1] - i] != 0 \
+            or (position[0], position[1] - 1) in agent_positions:
             max_straight = i - 1
             break
-        elif action == 'DOWN' and field[position[0], position[1] + i] != 0:
+        elif action == 'DOWN' and field[position[0], position[1] + i] != 0 \
+            or (position[0], position[1] + 1) in agent_positions:
             max_straight = i - 1
             break
 
@@ -274,22 +312,34 @@ def dead_end(field: np.array, position: Tuple[int, int], action: str) -> int:
         if action == 'LEFT':
             # left and than up/down to escape bomb
             new_position = (position[0] - i, position[1])
-            if field[new_position[0], new_position[1] - 1] == 0 or field[new_position[0], new_position[1] + 1] == 0:
+            if (field[new_position[0], new_position[1] - 1] == 0
+                and (new_position[0], new_position[1] - 1) not in agent_positions) \
+                or (field[new_position[0], new_position[1] + 1] == 0
+                    and (new_position[0], new_position[1] + 1) not in agent_positions):
                 return 0
         elif action == 'RIGHT':
             # right and than up/down to escape bomb
             new_position = (position[0] + i, position[1])
-            if field[new_position[0], new_position[1] - 1] == 0 or field[new_position[0], new_position[1] + 1] == 0:
+            if (field[new_position[0], new_position[1] - 1] == 0
+                and (new_position[0], new_position[1] - 1) not in agent_positions) \
+                or (field[new_position[0], new_position[1] + 1] == 0
+                    and (new_position[0], new_position[1] + 1) not in agent_positions):
                 return 0
         elif action == 'UP':
             # up and than left/right to escape bomb
             new_position = (position[0], position[1] - i)
-            if field[new_position[0] - 1, new_position[1]] == 0 or field[new_position[0] + 1, new_position[1]] == 0:
+            if (field[new_position[0] - 1, new_position[1]] == 0
+                and (new_position[0] - 1, new_position[1]) not in agent_positions) \
+                or (field[new_position[0] + 1, new_position[1]] == 0
+                    and (new_position[0] + 1, new_position[1]) not in agent_positions):
                 return 0
         elif action == 'DOWN':
             # down and than left/right to escape bomb
             new_position = (position[0], position[1] + i)
-            if field[new_position[0] - 1, new_position[1]] == 0 or field[new_position[0] + 1, new_position[1]] == 0:
+            if (field[new_position[0] - 1, new_position[1]] == 0
+                and (new_position[0], new_position[1] - 1) not in agent_positions) \
+                or (field[new_position[0] + 1, new_position[1]] == 0
+                    and (new_position[0], new_position[1] + 1) not in agent_positions):
                 return 0
 
     return 1
