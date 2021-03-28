@@ -186,10 +186,10 @@ def train_fobj():
                      log_dir='C:\\Users\\sophi\\Documents\\0_Master\\FML\\bomberman/logs',
                      make_video=False,
                      my_agent=None,
-                     n_rounds=40,
+                     n_rounds=30,
                      no_gui=True,
                      save_replay=False,
-                     train=50,
+                     train=1,
                      turn_based=False,
                      update_interval=0.1)
 
@@ -435,12 +435,16 @@ def fobj(rewards):
     }
     print("game_rewards :", train.game_rewards)
     train_fobj()
-    game_state = play_fobj()
-    return game_state
+    states = []
+    for x in range(3):
+        game_state = play_fobj()
+        states.append(game_state[0])
+    print("game state: ", sum(states))
+    return sum(states)/3
 
 
 def DE_Entry():
-    bounds = [(-50, 50)] * 20
+    bounds = [(-10, 10)] * 20
     result = list(de(fobj, bounds))
     print(result[-1])
     x, f = zip(*result)

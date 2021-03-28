@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib as plt
 
 
-def de(fobj, bounds, mut=0.8, crossp=0.7, popsize=20, its=1000):
+def de(fobj, bounds, mut=0.8, crossp=0.7, popsize=5, its=3000):
     """
 
     :param fobj: function to optimize (can be defined with def or lambda expression)
@@ -36,7 +36,7 @@ def de(fobj, bounds, mut=0.8, crossp=0.7, popsize=20, its=1000):
             # list with indexes of vectors in pop, excluding current one
             idxs = [idx for idx in range(popsize) if idx != j]
             # randomly choose 3 indexes
-            a, b, c = pop[np.random.choice(idxs, 3, replace = False)]
+            a, b, c = pop[np.random.choice(idxs, 3, replace=False)]
             # create mutant by combining a, b, c --> clip to normalize again
             mutant = np.clip(a + mut * (b - c), 0, 1)
             # binomial crossover
@@ -51,10 +51,11 @@ def de(fobj, bounds, mut=0.8, crossp=0.7, popsize=20, its=1000):
             # evaluate mutant
             f = fobj(trial_denorm)
             print("evaluate mutant: ", f)
-            if f < fitness[j]:
+            if f > fitness[j]:
                 fitness[j] = f
                 pop[j] = trial
-                if f < fitness[best_idx]:
+                print("mutant was better")
+                if f > fitness[best_idx]:
                     best_idx = j
                     best = trial_denorm
                     print("best ", best)

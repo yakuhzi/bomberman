@@ -13,14 +13,11 @@ def setup(self):
     """
     Setup your code. This is called once when loading each agent.
     Make sure that you prepare everything such that act(...) can be called.
-
     When in training mode, the separate `setup_training` in train.py is called
     after this method. This separation allows you to share your trained agent
     with other students, without revealing your training code.
-
     In this example, our model is a set of probabilities over actions
     that are is independent of the game state.
-
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
     if self.train or not os.path.isfile("my-saved-model.pt"):
@@ -35,20 +32,20 @@ def act(self, game_state: dict) -> str:
     """
     Your agent should parse the input, think, and take a decision.
     When not in training mode, the maximum execution time for this method is 0.5s.
-
     :param self: The same object that is passed to all of your callbacks.
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    random_prob = 0.3-(0.3/(101-game_state["round"]))
-    #input()
+    random_prob = 0.3
+
+    if "n_rounds" in game_state:
+        random_prob = max(0.3 - (game_state["round"] / game_state["n_rounds"]) * 0.3, 0) + 0.05
+
+    # input()
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
-        action = np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
-        # if action == 'BOMB':
-        #     print("RANDOM BOMB")
-        return action
+        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
 
     self.logger.debug("Querying model for action.")
     return get_best_action(self.model, game_state)
@@ -57,14 +54,11 @@ def act(self, game_state: dict) -> str:
 def state_to_features(game_state: dict, action: str) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
-
     Converts the game state to the input of your model, i.e.
     a feature vector.
-
     You can find out about the state of the game environment via game_state,
     which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
     what it contains.
-
     :param game_state:  A dictionary describing the current game board.
     :return: np.array
     """
@@ -85,7 +79,6 @@ def state_to_features(game_state: dict, action: str) -> np.array:
     features["invalid_action"] = 1 if not is_action_valid else 0
 
     features["useless_bomb"] = 0
-    # features["has_bomb"] = 1 if has_bomb else 0
 
     bomb_dist_before_move = bomb_distance(field, bombs, position)
 
@@ -109,9 +102,7 @@ def state_to_features(game_state: dict, action: str) -> np.array:
         elif action == 'DOWN':
             position = position[0], position[1] + 1
         elif action == 'BOMB':
-            # bombs.append((position, 3))
             features["useless_bomb"] = 0
-            # features["has_bomb"] = 0
 
     danger = danger_ahead(explosion_map, position)
     features["danger_ahead"] = 1 if danger else 0
@@ -126,6 +117,7 @@ def state_to_features(game_state: dict, action: str) -> np.array:
     features["bomb_distance"] = bomb_feature
 
     features["dead_end"] = 0
+
     if bomb_dist_before_move == 1:
         if is_action_valid:
             features["dead_end"] = dead_end(field, position, action)
@@ -151,16 +143,22 @@ def get_best_action(model: dict, state: dict) -> str:
     return ACTIONS[best_index]
 
 
-def action_information(field: np.array, bombs: List[Tuple[Tuple[int, int], int]], position: Tuple[int, int], has_bomb: bool, action: str) -> bool:
+def action_information(
+    field: np.array, bombs: List[Tuple[Tuple[int, int], int]], position: Tuple[int, int], has_bomb: bool, action: str
+) -> bool:
     bombs = list(map(lambda bomb: bomb[0], bombs))
 
-    if action == 'LEFT' and field[position[0] - 1, position[1]] != -1 and field[position[0] - 1, position[1]] != 1 and (position[0] - 1, position[1]) not in bombs:
+    if action == 'LEFT' and field[position[0] - 1, position[1]] != -1 and field[position[0] - 1, position[1]] != 1 \
+        and (position[0] - 1, position[1]) not in bombs:
         return True
-    elif action == 'RIGHT' and field[position[0] + 1, position[1]] != -1 and field[position[0] + 1, position[1]] != 1 and (position[0] + 1, position[1]) not in bombs:
+    elif action == 'RIGHT' and field[position[0] + 1, position[1]] != -1 and field[position[0] + 1, position[1]] != 1 \
+        and (position[0] + 1, position[1]) not in bombs:
         return True
-    elif action == 'UP' and field[position[0], position[1] - 1] != -1 and field[position[0], position[1] - 1] != 1 and (position[0], position[1] - 1) not in bombs:
+    elif action == 'UP' and field[position[0], position[1] - 1] != -1 and field[position[0], position[1] - 1] != 1 \
+        and (position[0], position[1] - 1) not in bombs:
         return True
-    elif action == 'DOWN' and field[position[0], position[1] + 1] != -1 and field[position[0], position[1] + 1] != 1 and (position[0], position[1] + 1) not in bombs:
+    elif action == 'DOWN' and field[position[0], position[1] + 1] != -1 and field[position[0], position[1] + 1] != 1 \
+        and (position[0], position[1] + 1) not in bombs:
         return True
     elif action == 'BOMB' and has_bomb:
         return True
@@ -208,20 +206,23 @@ def crate_distance(field: np.array, player_position: Tuple[int, int]) -> float:
 
 
 def dead_end(field: np.array, position: Tuple[int, int], action: str) -> int:
+    if action == 'WAIT' or action == 'BOMB':
+        return 0
+
     max_straight = None
 
     for i in range(1, 4):
         if action == 'LEFT' and field[position[0] - i, position[1]] != 0:
-            max_straight = i-1
+            max_straight = i - 1
             break
         elif action == 'RIGHT' and field[position[0] + i, position[1]] != 0:
-            max_straight = i-1
+            max_straight = i - 1
             break
-        elif action == 'UP' and field[position[0], position[1]-i] != 0:
-            max_straight = i-1
+        elif action == 'UP' and field[position[0], position[1] - i] != 0:
+            max_straight = i - 1
             break
-        elif action == 'DOWN' and field[position[0], position[1]+i] != 0:
-            max_straight = i-1
+        elif action == 'DOWN' and field[position[0], position[1] + i] != 0:
+            max_straight = i - 1
             break
 
     if max_straight is None:
@@ -229,32 +230,29 @@ def dead_end(field: np.array, position: Tuple[int, int], action: str) -> int:
 
     if max_straight > 2:
         return 0
-    #print(max_straight)
-    for i in range(max_straight+1):
+
+    for i in range(max_straight + 1):
         if action == 'LEFT':
             # left and than up/down to escape bomb
             new_position = (position[0] - i, position[1])
-            if field[new_position[0], new_position[1]-1] == 0 or field[new_position[0], new_position[1]+1] == 0:
+            if field[new_position[0], new_position[1] - 1] == 0 or field[new_position[0], new_position[1] + 1] == 0:
                 return 0
         elif action == 'RIGHT':
             # right and than up/down to escape bomb
             new_position = (position[0] + i, position[1])
-            if field[new_position[0], new_position[1]-1] == 0 or field[new_position[0], new_position[1]+1] == 0:
+            if field[new_position[0], new_position[1] - 1] == 0 or field[new_position[0], new_position[1] + 1] == 0:
                 return 0
         elif action == 'UP':
             # up and than left/right to escape bomb
-            new_position = (position[0], position[1]-i)
-            if field[new_position[0]-1, new_position[1]] == 0 or field[new_position[0]+1, new_position[1]] == 0:
+            new_position = (position[0], position[1] - i)
+            if field[new_position[0] - 1, new_position[1]] == 0 or field[new_position[0] + 1, new_position[1]] == 0:
                 return 0
         elif action == 'DOWN':
             # down and than left/right to escape bomb
-            new_position = (position[0], position[1]+i)
-            if field[new_position[0]-1, new_position[1]] == 0 or field[new_position[0]+1, new_position[1]] == 0:
+            new_position = (position[0], position[1] + i)
+            if field[new_position[0] - 1, new_position[1]] == 0 or field[new_position[0] + 1, new_position[1]] == 0:
                 return 0
-    if action == 'WAIT':
-        return 1
-    elif action == 'BOMB':
-        return 0
+
     return 1
 
 
