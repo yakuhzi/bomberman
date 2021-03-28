@@ -4,7 +4,7 @@ from typing import Dict, Optional
 from .callbacks import state_to_features, get_q_value
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
-ALPHA = 0.5
+ALPHA = 0.1
 GAMMA = 0.9
 
 

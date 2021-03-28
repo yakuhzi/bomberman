@@ -4,7 +4,6 @@ import numpy as np
 import pickle
 from math import isclose
 from typing import List, Optional
-
 import events as e
 from .callbacks import state_to_features
 from .q_learning_lva import update_q_function
@@ -158,11 +157,10 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 def update_model(self, old_game_state: dict, self_action: str, new_game_state: Optional[dict], events: List[str]):
     # Convert state to features
     current_features = state_to_features(old_game_state, self_action)
-    #print(self_action, current_features)
 
     # Add auxiliary events
     if len(self.transitions) > 1:
-        add_auxiliary_events(self, events, current_features)
+        add_auxiliary_events(self, events, old_game_state, current_features)
 
     # Calculate reward
     reward = reward_from_events(self, events)
@@ -184,9 +182,20 @@ def update_model(self, old_game_state: dict, self_action: str, new_game_state: O
     self.model = update_q_function(self.model, old_game_state, self_action, new_game_state, reward)
 
 
-def add_auxiliary_events(self, events: List[str], current_features: dict):
+def add_auxiliary_events(self, events: List[str], old_game_state: dict, current_features: dict):
     if e.BOMB_DROPPED in events:
+        agent_positons = list(map(lambda agent: agent[3], old_game_state["others"]))
+        position = old_game_state["self"][3]
+
         if 0.11 < self.transitions[-1][0]["crate_distance"] < 0.15:
+            events.append(USEFUL_BOMB)
+        elif (position[0] - 1, position[1]) in agent_positons or (position[0] - 2, position[1]) in agent_positons:
+            events.append(USEFUL_BOMB)
+        elif (position[0] + 1, position[1]) in agent_positons or (position[0] + 2, position[1]) in agent_positons:
+            events.append(USEFUL_BOMB)
+        elif (position[0], position[1] - 1) in agent_positons or (position[0], position[1] - 2) in agent_positons:
+            events.append(USEFUL_BOMB)
+        elif (position[0], position[1] + 1) in agent_positons or (position[0], position[1] + 2) in agent_positons:
             events.append(USEFUL_BOMB)
         else:
             events.append(USELESS_BOMB)
@@ -219,7 +228,7 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 10,
+        e.COIN_COLLECTED: 15,
         e.KILLED_OPPONENT: 50,
         e.KILLED_SELF: -100,
         e.GOT_KILLED: -80,
@@ -248,8 +257,6 @@ def reward_from_events(self, events: List[str]) -> int:
     for event in events:
         if event in game_rewards:
             reward_sum += game_rewards[event]
-
-    # print(reward_sum, events)
 
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
