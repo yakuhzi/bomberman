@@ -1,8 +1,9 @@
-import numpy as np
 import os
 import pickle
 import random
 from typing import List, Tuple
+
+import numpy as np
 
 from .bfs import BFS
 

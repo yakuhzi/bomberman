@@ -1,13 +1,12 @@
-from collections import namedtuple, deque
-
-import numpy as np
 import pickle
+from collections import namedtuple, deque
 from math import isclose
 from typing import List, Optional
+
 import events as e
 from .callbacks import state_to_features
 from .q_learning_lva import update_q_function
-from .visualization import Visualization
+from .statistics import Statistics
 
 Transition = namedtuple('Transition', ('state', 'action', 'reward'))
 
@@ -33,25 +32,7 @@ def setup_training(self):
     """
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
     self.model = initialize_model()
-
-    self.rewards = []
-    self.total_rewards = []
-    self.average_rewards = []
-
-    self.coins = 0
-    self.total_coins = []
-    self.average_coins = []
-
-    self.steps = []
-    self.average_steps = []
-
-    self.invalid_actions = 0
-    self.total_invalid_actions = []
-    self.average_invalid_actions = []
-
-    self.killed_agents = 0
-    self.total_killed_agents = []
-    self.average_killed_agents = []
+    self.statistics = Statistics()
 
 
 def initialize_model():
@@ -93,10 +74,6 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if old_game_state is None:
         return
 
-    # for statistics
-    if e.INVALID_ACTION in events:
-        self.invalid_actions += 1
-
     # Update model
     update_model(self, old_game_state, self_action, new_game_state, events)
 
@@ -121,41 +98,12 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     # Update model
     update_model(self, last_game_state, last_action, None, events)
 
-    # Calculate total rewards
-    total_reward = np.sum(self.rewards)
-    self.total_rewards.append(total_reward)
-    self.rewards = []
+    # Add statistic for the last round
+    self.statistics.add_round_statistic(last_game_state)
 
-    # Append statistics
-    self.steps.append(last_game_state['step'])
-
-    self.total_invalid_actions.append(self.invalid_actions)
-    self.invalid_actions = 0
-
-    self.total_coins.append(self.coins)
-    self.coins = 0
-
-    self.total_killed_agents.append(self.killed_agents)
-    self.killed_agents = 0
-
-    # Calculate average statistics
-    self.average_rewards.append(np.sum(self.total_rewards) / len(self.total_rewards))
-    self.average_steps.append(np.sum(self.steps) / len(self.steps))
-    self.average_invalid_actions.append(np.sum(self.total_invalid_actions) / len(self.total_invalid_actions))
-    self.average_coins.append(np.sum(self.total_coins) / len(self.total_coins))
-    self.average_killed_agents.append(np.sum(self.total_killed_agents) / len(self.total_killed_agents))
-
-    # Plot training statistics after last round
+    # Show statistics at the end of training
     if "n_rounds" in last_game_state and last_game_state["round"] == last_game_state["n_rounds"]:
-        Visualization.show_statistic("Reward", last_game_state["round"], self.total_rewards, self.average_rewards)
-        Visualization.show_statistic("Steps", last_game_state["round"], self.steps, self.average_steps)
-        Visualization.show_statistic(
-            "Invalid Actions", last_game_state["round"], self.total_invalid_actions, self.average_invalid_actions
-        )
-        Visualization.show_statistic("Coins Collected", last_game_state["round"], self.total_coins, self.average_coins)
-        Visualization.show_statistic(
-            "Agents killed", last_game_state["round"], self.total_killed_agents, self.average_killed_agents
-        )
+        self.statistics.show(last_game_state["round"])
 
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
@@ -180,15 +128,9 @@ def update_model(self, old_game_state: dict, self_action: str, new_game_state: O
 
     # Calculate reward
     reward = reward_from_events(self, events)
-    self.rewards.append(reward)
 
-    # Add coin statistic
-    if e.COIN_COLLECTED in events:
-        self.coins += 1
-
-    # Add kill statistic
-    if e.KILLED_OPPONENT in events:
-        self.killed_agents += 1
+    # Add statistic for the last step
+    self.statistics.add_step_statistic(reward, events)
 
     # Add transition to memory
     transition = Transition(current_features, self_action, reward)
