@@ -11,7 +11,7 @@ from .visualization import Visualization
 
 Transition = namedtuple('Transition', ('state', 'action', 'reward'))
 
-# Hyper parameters -- DO modify
+# Hyper parameter
 TRANSITION_HISTORY_SIZE = 1000  # keep only ... last transitions
 
 # Events
@@ -55,6 +55,10 @@ def setup_training(self):
 
 
 def initialize_model():
+    """
+    Initialize the model with 0. The weights are per feature
+    :return: initialized model as dictionary
+    """
     return {
         "invalid_action": 0,
         "coin_distance": 0,
@@ -89,6 +93,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if old_game_state is None:
         return
 
+    # for statistics
     if e.INVALID_ACTION in events:
         self.invalid_actions += 1
 
@@ -107,6 +112,9 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     This is also a good place to store an agent that you updated.
 
     :param self: The same object that is passed to all of your callbacks.
+    :param last_game_state: the last state of the game
+    :param last_action: the last action the agent executed
+    :param events: the events that occurred in the last action of the game
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
 
@@ -155,6 +163,14 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
 
 def update_model(self, old_game_state: dict, self_action: str, new_game_state: Optional[dict], events: List[str]):
+    """
+    Update the model after a step in the game
+    :param self: The same object that is passed to all of the callbacks.
+    :param old_game_state: the game state before the action was executed
+    :param self_action: the action the agent executed
+    :param new_game_state: the new game state the agent is in now
+    :param events: the events that occurred in that game step
+    """
     # Convert state to features
     current_features = state_to_features(old_game_state, self_action)
 
@@ -183,6 +199,14 @@ def update_model(self, old_game_state: dict, self_action: str, new_game_state: O
 
 
 def add_auxiliary_events(self, events: List[str], old_game_state: dict, current_features: dict):
+    """
+    Add auxiliary events that are not part of the "standard" event list
+    :param self: The same object that is passed to all of the callbacks.
+    :param events: the events that occurred in that game step
+    :param old_game_state: the game state before the action was executed
+    :param current_features: the features of the current game state
+    """
+    # Check if a dropped bomb was useful or useless, i.e. it was dropped near a crate or an agent
     if e.BOMB_DROPPED in events:
         agent_positons = list(map(lambda agent: agent[3], old_game_state["others"]))
         position = old_game_state["self"][3]
@@ -200,6 +224,7 @@ def add_auxiliary_events(self, events: List[str], old_game_state: dict, current_
         else:
             events.append(USELESS_BOMB)
 
+    # Check if the agent waited near a bomb (in danger)
     old_bomb_distance = self.transitions[-1][0]["bomb_distance"]
     new_bomb_distance = current_features["bomb_distance"]
 
@@ -207,6 +232,7 @@ def add_auxiliary_events(self, events: List[str], old_game_state: dict, current_
         old_bomb_distance == 0 and new_bomb_distance == 1):
         events.append(WAITED_IN_DANGER)
 
+    # Check if the agent moved away or towards a bomb
     if old_bomb_distance == 0 and new_bomb_distance == 0.75:
         events.append(MOVED_AWAY_FROM_BOMB)
 
@@ -216,17 +242,19 @@ def add_auxiliary_events(self, events: List[str], old_game_state: dict, current_
         elif isclose(old_bomb_distance - new_bomb_distance, 0.25, abs_tol=0.05):
             events.append(MOVED_AWAY_FROM_BOMB)
 
+    # Check if the agent went into a dead end
     if current_features["dead_end"] == 1 and e.INVALID_ACTION not in events and "WAITED" not in events:
         events.append(DEAD_END)
 
 
 def reward_from_events(self, events: List[str]) -> int:
     """
-    *This is not a required function, but an idea to structure your code.*
-
-    Here you can modify the rewards your agent get so as to en/discourage
-    certain behavior.
+    Rewards the agent gets so as to en/discourage certain behavior.
+    :param self: The same object that is passed to all of the callbacks.
+    :param events: the events that occurred in that game step
+    :return: the sum of all rewards
     """
+    # define how much a behaviour should be positively/ negatively rewarded
     game_rewards = {
         e.COIN_COLLECTED: 15,
         e.KILLED_OPPONENT: 50,
@@ -252,6 +280,7 @@ def reward_from_events(self, events: List[str]) -> int:
         DEAD_END: -25
     }
 
+    # sum up the rewards for all events that occurred
     reward_sum = 0
 
     for event in events:
